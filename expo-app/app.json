@@ -1,0 +1,8 @@
+{
+  "expo": {
+    "name": "LolaDemo",
+    "slug": "lola-demo",
+    "platforms": ["ios","android","web"],
+    "sdkVersion": "54.0.0"
+  }
+}

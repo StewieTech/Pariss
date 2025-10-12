@@ -1,0 +1,58 @@
+t # Node
+node_modules/
+
+# TypeScript
+dist/
+build/
+*.tsbuildinfo
+
+# Env
+.env
+.env.*
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Tests
+coverage/
+
+# Expo / React Native
+*.expo
+.expo-shared/
+android/
+ios/
+web-build/
+
+# Caches
+.expo/cache/
+.expo/*-cache/
+/.expo/
+/.expo-shared/
+expo-app/node_modules/
+
+# Local DB / artifacts
+*.db
+
+# Large or generated
+node_modules/**/node_modules
+**/npm-debug.log
+**/yarn-debug.log
+
+**/yarn-error.log
+
+# Keep master prompt private
+src/utils/prompt.ts
