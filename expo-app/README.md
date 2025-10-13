@@ -50,6 +50,7 @@ http://lola-frontend.s3-website.ca-central-1.amazonaws.com/
 
 # Prototype
 - Have a working app for Delly and Kennick to Test
+- fix lambda server functions
 
 # MVP
 - Have all three staging prod and preprod versions working
