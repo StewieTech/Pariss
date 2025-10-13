@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { SafeAreaView, View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import axios from 'axios';
 
-const API = 'http://192.168.2.44:4000/api/v1'; // use Android emulator / change to your host
-// const API = 'http://192.168.2.46:4000/api/v1'; // use Android emulator / change to your host
+// Configure API host: prefer EXPO_API_URL env var (set during build or via app config).
+// Example for deployed Lambda Function URL: https://xxxx.lambda-url.ca-central-1.on.aws
+const API_FROM_ENV = process.env.EXPO_API_URL || '';
+const DEFAULT_LOCAL = 'http://192.168.2.44:4000/api/v1'; // local dev fallback
+const API = API_FROM_ENV ? `${API_FROM_ENV.replace(/\/$/, '')}/api/v1` : DEFAULT_LOCAL;
 
 export default function App() {
   const [text, setText] = useState('');
