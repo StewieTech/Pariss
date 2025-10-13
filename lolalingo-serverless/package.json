@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "esbuild src/handler.ts --bundle --platform=node --target=node20 --outfile=dist/handler.js",
+    "build:cjs": "esbuild src/handler.ts --bundle --platform=node --format=cjs --target=node20 --outfile=dist/handler.cjs",
     "deploy": "npm run build && npx serverless deploy",
-    "start": "node dist/handler.js"
+    "start": "node dist/handler.js",
+    "test-local": "node test-local.js"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.136",
@@ -17,6 +19,7 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.635.0",
     "@aws-sdk/client-lambda": "^3.635.0",
-    "@aws-sdk/client-ssm": "^3.635.0"
+    "@aws-sdk/client-ssm": "^3.635.0",
+    "docker": "^1.0.0"
   }
 }

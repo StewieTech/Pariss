@@ -20,6 +20,12 @@
     "dev": "expo start --dev-client",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "export:web": "expo export:web",
+    "export:web:prod": "cross-env EXPO_API_URL=https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws expo export:web"
+  }
+  ,
+  "devDependencies": {
+    "cross-env": "^7.0.3"
   }
 }

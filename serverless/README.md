@@ -34,3 +34,15 @@ How promotions work
 - Good check of folders and their contents for powershell
 cd "C:\Users\Errol\Dropbox\Harvard CS50\StewieTech Portfolio\Backend\LolaInParis\serverless"
 Get-ChildItem -Recurse -File | Select-Object FullName
+
+### Check if Works
+# PowerShell native
+Invoke-RestMethod -Uri 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/health' -Method GET
+
+$body = @{ text='hello'; mode='m1' } | ConvertTo-Json
+Invoke-RestMethod -Uri 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/chat/send' -Method POST -Body $body -ContentType 'application/json'
+
+## Testing
+cd 'C:\Users\Errol\Dropbox\Harvard CS50\StewieTech Portfolio\Backend\LolaInParis\lolalingo-serverless'
+npm run build:cjs
+npm run test-local

@@ -51,3 +51,21 @@ aws lambda create-function-url-config --function-name lola-api --qualifier stagi
 
 # Point STAGING alias at the new version and create its Function URL
 ENV_ALIAS=staging ./scripts/promote_alias.sh
+
+
+How promotions work
+
+- Pushes to `develop` run deploy + map alias `staging`.
+- Tags matching `vYYYY.MM.DD-rcN` will deploy and set alias `preprod`.
+- Tags matching `vYYYY.MM.DD` will require a manual gate and then set alias `prod`.
+
+### Notes
+cd "C:\Users\Errol\Dropbox\Harvard CS50\StewieTech Portfolio\Backend\LolaInParis\serverless"
+Get-ChildItem -Recurse -File | Select-Object FullName
+
+### Check if Works
+# PowerShell native
+Invoke-RestMethod -Uri 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/health' -Method GET
+
+$body = @{ text='hello'; mode='m1' } | ConvertTo-Json
+Invoke-RestMethod -Uri 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/chat/send' -Method POST -Body $body -ContentType 'application/json'

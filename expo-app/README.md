@@ -28,7 +28,14 @@ aws s3api put-bucket-encryption --bucket $bucket --server-side-encryption-config
 ## Build
 cd .\expo-app
 # build/export static web (tooling differs by Expo SDK; try one)
-npx expo export:web
+npm ci
+
+# For a production static export that points to your deployed Lambda backend run:
+# This sets EXPO_API_URL so the built app calls your deployed function
+npm run export:web:prod
+
+# or to export without embedding a production API URL:
+npm run export:web
 
 # sync to S3
 aws s3 sync .\web-build\ s3://lola-frontend --delete --region $region
@@ -45,6 +52,9 @@ aws s3 website s3://lola-frontend --index-document index.html --error-document i
 
 http://lola-frontend.s3-website.ca-central-1.amazonaws.com/
 
+
+## Lambda Backend
+https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/
 
 # ToDo
 

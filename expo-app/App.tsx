@@ -6,7 +6,8 @@ import axios from 'axios';
 // Example for deployed Lambda Function URL: https://xxxx.lambda-url.ca-central-1.on.aws
 const API_FROM_ENV = process.env.EXPO_API_URL || '';
 const DEFAULT_LOCAL = 'http://192.168.2.44:4000/api/v1'; // local dev fallback
-const API = API_FROM_ENV ? `${API_FROM_ENV.replace(/\/$/, '')}/api/v1` : DEFAULT_LOCAL;
+// const API = API_FROM_ENV ? `${API_FROM_ENV.replace(/\/$/, '')}/api/v1` : DEFAULT_LOCAL;
+const API = API_FROM_ENV 
 
 export default function App() {
   const [text, setText] = useState('');

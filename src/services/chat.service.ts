@@ -9,8 +9,20 @@ function getOpenAIClient() {
 }
 
 export async function handleChat({ userId, text, mode }: { userId?: string; text: string; mode: 'm1' | 'm2' | 'm3' }) {
+  // Local test shortcut: avoid DB and OpenAI calls when TEST_LOCAL=1
+  if (process.env.TEST_LOCAL === '1') {
+    const reply = `local-mock-reply: ${text}`;
+    return { reply, tokens: { prompt: 0, completion: 0, total: 0 } } as any;
+  }
   const system = buildSystemMessages(mode);
-  const history = await getRecent(userId, 12);
+  let history: any[] = [];
+  try {
+    history = await getRecent(userId, 12);
+  } catch (err: any) {
+    // If DB isn't available (local test), continue with empty history
+    console.warn('handleChat: getRecent failed, continuing with empty history', String(err));
+    history = [];
+  }
 
   const messages: any[] = [
     ...system,
@@ -32,8 +44,16 @@ export async function handleChat({ userId, text, mode }: { userId?: string; text
 
   const reply = resp.choices?.[0]?.message?.content || 'Sorry, no reply.';
 
-  await saveTurn(userId, 'user', mode, text);
-  await saveTurn(userId, 'assistant', mode, reply);
+  try {
+    await saveTurn(userId, 'user', mode, text);
+  } catch (err: any) {
+    console.warn('handleChat: failed to save user turn', String(err));
+  }
+  try {
+    await saveTurn(userId, 'assistant', mode, reply);
+  } catch (err: any) {
+    console.warn('handleChat: failed to save assistant turn', String(err));
+  }
 
   return { reply, tokens: resp.usage };
 }
