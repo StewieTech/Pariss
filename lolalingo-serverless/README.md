@@ -16,6 +16,8 @@ lolalingo-staging-serverlessdeploymentbucket-dbxctmcuvqve       ServerlessDeploy
 aws s3api head-bucket --bucket lolalingo-staging-serverlessdeploymentbucket-dbxctmcuvqve --region $region; if ($LASTEXITCODE -eq 0) { Write-Output 'Bucket exists' } else { Write-Output 'Bucket missing or permission denied' }
 
 # set profile/region
+aws sts get-caller-identity --region ca-central-1
+aws configure --profile asklolaai
 $env:AWS_PROFILE = 'asklolaai'
 $region = 'ca-central-1'
 $bucket = 'lolalingo-staging-serverlessdeploymentbucket-dbxctmcuvqve'
@@ -31,7 +33,8 @@ aws s3api put-public-access-block --bucket $bucket --public-access-block-configu
 aws s3api put-bucket-encryption --bucket $bucket --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}' --region $region
 
 # removes broken stack
-npx serverless remove --stage staging --region $region
+<!-- npx serverless remove --stage staging --region $region --aws-profile asklolaai  I would of thought it was this one for sure--> 
+npx serverless remove --stage staging --region $region 
 
 ## First-time setup
 ```bash
@@ -41,6 +44,8 @@ npm ci
 
 # Build & deploy the base stack
 npm run build
+# npx serverless deploy --region ca-central-1 --stage staging # I would of thought it was this one for sure
+# --aws-profile asklola
 npx serverless deploy --region ca-central-1
 
 # publish + alias + alias-URL (promote script)

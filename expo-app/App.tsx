@@ -4,10 +4,35 @@ import axios from 'axios';
 
 // Configure API host: prefer EXPO_API_URL env var (set during build or via app config).
 // Example for deployed Lambda Function URL: https://xxxx.lambda-url.ca-central-1.on.aws
-const API_FROM_ENV = process.env.EXPO_API_URL || '';
-const DEFAULT_LOCAL = 'http://192.168.2.44:4000/api/v1'; // local dev fallback
-// const API = API_FROM_ENV ? `${API_FROM_ENV.replace(/\/$/, '')}/api/v1` : DEFAULT_LOCAL;
-const API = API_FROM_ENV 
+// const EXPO_API_URL = process.env.EXPO_API_URL;
+const EXPO_API_URL = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws';
+const DEFAULT_LOCAL = 'http://192.168.2.44:4000'; // local dev fallback (no /api/v1 appended yet)
+
+// Compute API base robustly so the app never calls 'undefined'.
+function computeApiBase() {
+  // 1) prefer explicit EXPO_API_URL injected at build time
+  if (EXPO_API_URL && EXPO_API_URL.trim()) return EXPO_API_URL.replace(/\/$/, '');
+
+  // 2) when running as an exported Expo web app, extras can land on window.__EXPO_CONFIG__
+  try {
+    // @ts-ignore - window may not have this in every environment
+    const win: any = typeof window !== 'undefined' ? window : undefined;
+    const expoConfig = win && win.__EXPO_CONFIG__;
+    const extras = expoConfig && expoConfig.extra;
+    if (extras && extras.EXPO_API_URL) return String(extras.EXPO_API_URL).replace(/\/$/, '');
+  } catch (e) {
+    // ignore
+  }
+
+  // 3) fallback to local dev host
+  return DEFAULT_LOCAL;
+}
+
+const API_BASE = computeApiBase();
+// const API = `${API_BASE}/api/v1`;
+const API = `${API_BASE}`;
+// log the computed API for debugging in the browser console
+if (typeof console !== 'undefined') console.log('Lola Demo API base:', API_BASE);
 
 export default function App() {
   const [text, setText] = useState('');
@@ -27,8 +52,24 @@ export default function App() {
     try {
       const res = await axios.post(`${API}/chat/send`, { text: userMsg.content, mode });
       setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply }]);
-    } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Error calling API' }]);
+    } catch (err: any) {
+      // log full error for debugging (network, status, response)
+      console.error('API call failed', err);
+      let message = 'Error calling APII';
+      try {
+        if (err.response) {
+          // axios error with response from server
+          message = `API error ${err.response.status}: ${err.response.data?.error || JSON.stringify(err.response.data)}`;
+        } else if (err.request) {
+          // no response received
+          message = 'No response from server (network or CORS)';
+        } else {
+          message = String(err.message || err);
+        }
+      } catch (e) {
+        message = String(err);
+      }
+      setMessages(prev => [...prev, { role: 'assistant', content: message }]);
     }
   }
 
