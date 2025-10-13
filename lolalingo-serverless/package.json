@@ -1,0 +1,22 @@
+{
+  "name": "lolalingo-serverless",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/handler.ts --bundle --platform=node --target=node20 --outfile=dist/handler.js",
+    "deploy": "npm run build && npx serverless deploy",
+    "start": "node dist/handler.js"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.136",
+    "esbuild": "^0.23.0",
+    "serverless": "^3.39.0",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.635.0",
+    "@aws-sdk/client-lambda": "^3.635.0",
+    "@aws-sdk/client-ssm": "^3.635.0"
+  }
+}

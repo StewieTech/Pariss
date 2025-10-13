@@ -1,0 +1,75 @@
+service: lolalingo
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  region: ca-central-1
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'preprod'}
+  lambda:
+    memorySize: 512
+    timeout: 10
+  environment:
+    STAGE: ${opt:stage, 'preprod'}
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource: arn:aws:ssm:${self:provider.region}:*:parameter/lola/*
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+            - dynamodb:Query
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: arn:aws:dynamodb:${self:provider.region}:*:table/lola_app
+
+plugins:
+  - serverless-esbuild
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    format: cjs
+    target: node20
+    sourcemap: true
+    outdir: dist
+
+package:
+  exclude:
+    - "**/*"
+  include:
+    - dist/**
+
+functions:
+  lola-api:
+    handler: src/handler.handler
+    name: ${self:service}-${self:provider.stage}-lola-api
+    description: LolaLingo API (minimal)
+    # permissions for SSM and DynamoDB are added in provider.iamRoleStatements
+
+resources:
+  Resources:
+    LolaAppTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: lola_app
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+
+  

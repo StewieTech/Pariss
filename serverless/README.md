@@ -27,3 +27,10 @@ How promotions work
 - Pushes to `develop` run deploy + map alias `staging`.
 - Tags matching `vYYYY.MM.DD-rcN` will deploy and set alias `preprod`.
 - Tags matching `vYYYY.MM.DD` will require a manual gate and then set alias `prod`.
+
+### Notes
+- This was my old cicd.yml; apperently this is how they use to do it with long lived keys within Github
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+- Good check of folders and their contents for powershell
+cd "C:\Users\Errol\Dropbox\Harvard CS50\StewieTech Portfolio\Backend\LolaInParis\serverless"
+Get-ChildItem -Recurse -File | Select-Object FullName

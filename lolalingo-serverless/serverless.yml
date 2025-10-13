@@ -1,0 +1,47 @@
+service: lolalingo
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ca-central-1
+  stage: dev
+  memorySize: 256
+  architecture: arm64
+  environment:
+    DDB_TABLE: lola_app
+    # Alias name injected at deploy/promote time (prod|staging|preprod)
+    ENV_ALIAS: ${env:ENV_ALIAS, 'staging'}
+
+package:
+  individually: false
+  patterns:
+    - "!**/*"
+    - "dist/**"
+
+functions:
+  api:
+    name: lola-api
+    handler: dist/handler.http
+    # Function URL (base one; alias-specific URLs are created via post-deploy script)
+    url: true
+    # No events here (we use Function URLs to stay ultra-cheap)
+    # CORS tuning is done when alias URLs are created
+
+resources:
+  Resources:
+    LolaTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: lola_app
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE

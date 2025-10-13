@@ -33,10 +33,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ca-central-1
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: arn:aws:iam::489909409978:role/GithubOpen
           role-session-name: cicd
       - name: Deploy (staging)
         working-directory: serverless

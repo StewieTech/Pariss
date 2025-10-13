@@ -1,0 +1,99 @@
+name: CI/CD (LolaLingo Serverless)
+
+on:
+  push:
+    branches: [ develop, main ]
+    tags: [ 'v*' ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Configure AWS (assume-role via OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ca-central-1
+          role-to-assume: arn:aws:iam::489909409978:role/GithubOpen
+          role-session-name: cicd
+      - name: Serverless Deploy
+        working-directory: lolalingo-serverless
+        env:
+          ENV_ALIAS: staging
+        run: |
+          npm ci
+          npm run build
+          npx serverless deploy --stage staging --region ca-central-1
+
+  promote-staging:
+    if: github.ref == 'refs/heads/develop'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS (assume-role via OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ca-central-1
+          role-to-assume: arn:aws:iam::489909409978:role/GithubOpen
+          role-session-name: cicd
+      - name: Promote to STAGING alias
+        working-directory: lolalingo-serverless
+        env:
+          ENV_ALIAS: staging
+        run: |
+          npm ci
+          ./scripts/promote_alias.sh
+
+  promote-preprod:
+    # Any tag like v2025.10.10-rc1 (contains '-rc')
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref, '-rc')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS (assume-role via OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ca-central-1
+          role-to-assume: arn:aws:iam::489909409978:role/GithubOpen
+          role-session-name: cicd
+      - name: Promote to PREPROD alias
+        working-directory: lolalingo-serverless
+        env:
+          ENV_ALIAS: preprod
+        run: |
+          npm ci
+          ./scripts/promote_alias.sh
+
+  promote-prod:
+    # Production tag like v2025.10.10 (no '-rc')
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-rc')
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS (assume-role via OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ca-central-1
+          role-to-assume: arn:aws:iam::489909409978:role/GithubOpen
+          role-session-name: cicd
+      - name: Promote to PROD alias
+        working-directory: lolalingo-serverless
+        env:
+          ENV_ALIAS: prod
+        run: |
+          npm ci
+          ./scripts/promote_alias.sh
