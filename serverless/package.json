@@ -1,0 +1,23 @@
+{
+  "name": "lolalingo-serverless",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/handler.ts --bundle --platform=node --target=node20 --outfile=dist/handler.js --sourcemap",
+    "clean": "rimraf dist node_modules .serverless",
+    "deploy": "sls deploy --stage ${STAGE:-preprod}",
+    "postdeploy": "node scripts/postdeploy.js ${STAGE:-preprod}"
+  },
+  "devDependencies": {
+    "esbuild": "^0.18.20",
+    "rimraf": "^5.0.0",
+    "serverless": "^3.40.0",
+    "serverless-esbuild": "^1.22.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ssm": "^3.350.0",
+    "@aws-sdk/client-lambda": "^3.350.0",
+    "@aws-sdk/client-dynamodb": "^3.350.0"
+  }
+}

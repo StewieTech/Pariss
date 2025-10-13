@@ -1,0 +1,77 @@
+name: LolaLingo CI/CD
+
+on:
+  push:
+    branches: [ develop ]
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      function-name: ${{ steps.set.outputs.fn }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        working-directory: serverless
+        run: npm ci
+      - name: Build
+        working-directory: serverless
+        run: npm run build
+      - name: Set function name output
+        id: set
+        run: echo "::set-output name=fn::${{ github.repository }}-${{ github.ref_name }}-lola-api"
+
+  deploy-staging:
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: ca-central-1
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: cicd
+      - name: Deploy (staging)
+        working-directory: serverless
+        env:
+          STAGE: staging
+        run: |
+          npm ci
+          npm run build
+          npx serverless deploy --stage staging
+          node scripts/postdeploy.js staging
+
+  deploy-tag:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: ca-central-1
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: cicd
+      - name: Deploy (tag)
+        working-directory: serverless
+        env:
+          STAGE: preprod
+        run: |
+          npm ci
+          npm run build
+          npx serverless deploy --stage preprod
+          # choose alias based on tag pattern
+          if [[ "${GITHUB_REF}" =~ -rc ]]; then
+            node scripts/postdeploy.js preprod
+          else
+            # prod flow - require manual approval
+            echo "Prod deploy requires manual approval" && exit 78
+          fi
