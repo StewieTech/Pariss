@@ -56,3 +56,6 @@ node_modules/**/node_modules
 
 # Keep master prompt private
 src/utils/prompt.ts
+
+# Scripts
+lolalingo-serverless/scripts/setup_ssm.sh
