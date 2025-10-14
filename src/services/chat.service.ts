@@ -26,8 +26,8 @@ export async function handleChat({ userId, text, mode }: { userId?: string; text
 
   const messages: any[] = [
     ...system,
-    // include history as system/user/assistant turns
-    ...history
+    // include history as system/user/assistant turns (preserve original order)
+    ...[...history]
       .reverse()
       .map((h: any) => ({ role: h.role as 'user' | 'assistant' | 'system', content: h.content })),
     { role: 'user', content: text }
@@ -35,14 +35,24 @@ export async function handleChat({ userId, text, mode }: { userId?: string; text
 
   // call OpenAI Chat Completions
   const client = getOpenAIClient();
-  const resp = await client.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages,
-    temperature: 0.6,
-    max_tokens: 300
-  });
+  let resp: any;
+  try {
+    resp = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages,
+      temperature: 0.6,
+      max_tokens: 300
+    });
+  } catch (err: any) {
+    console.error('OpenAI request failed', String(err));
+    // throw a structured error for controller to translate into 502
+    const e = new Error('OpenAI request failed');
+    // attach original for logs
+    (e as any).original = err;
+    throw e;
+  }
 
-  const reply = resp.choices?.[0]?.message?.content || 'Sorry, no reply.';
+  const reply = resp?.choices?.[0]?.message?.content || 'Sorry, no reply.';
 
   try {
     await saveTurn(userId, 'user', mode, text);

@@ -34,7 +34,7 @@ aws s3api put-bucket-encryption --bucket $bucket --server-side-encryption-config
 
 # removes broken stack
 <!-- npx serverless remove --stage staging --region $region --aws-profile asklolaai  I would of thought it was this one for sure--> 
-npx serverless remove --stage staging --region $region 
+<!-- npx serverless remove --stage staging --region $region  -->
 
 ## First-time setup
 ```bash
@@ -45,17 +45,25 @@ npm ci
 # Build & deploy the base stack
 npm run build
 # npx serverless deploy --region ca-central-1 --stage staging # I would of thought it was this one for sure
-# --aws-profile asklola
 npx serverless deploy --region ca-central-1
+npx serverless deploy --region ca-central-1 --stage dev --aws-profile asklolaai
+
+
+$env:EXPO_API_URL='https://<prod-function-url>'; expo export:web
+aws s3 sync .\web-build\ s3://lola-frontend-prod --delete --region ca-central-1
 
 # publish + alias + alias-URL (promote script)
-# If using PowerShell (AWS CLI):
+## This publishes a new version apparently
 $ver = aws lambda publish-version --function-name lola-api --region $region --query 'Version' --output text
-aws lambda create-alias --function-name lola-api --name staging --function-version $ver --region $region 2>$null || aws lambda update-alias --function-name lola-api --name staging --function-version $ver --region $region
-aws lambda create-function-url-config --function-name lola-api --qualifier staging --auth-type NONE --cors 'AllowOrigins=["*"],AllowMethods=["GET","POST","OPTIONS"],AllowHeaders=["*"]' --region $region --query 'FunctionUrl' --output text
+
+## here is where I would change the name to staging | prod | preprod -> this creates or updates alias
+aws lambda create-alias --function-name lola-api --name prod --function-version $ver --region $region 2>$null || aws lambda update-alias --function-name lola-api --name staging --function-version $ver --region $region
+
+aws lambda create-function-url-config --function-name lola-api --qualifier prod --auth-type NONE --cors 'AllowOrigins=["*"],AllowMethods=["GET","POST","OPTIONS"],AllowHeaders=["*"]' --region $region --query 'FunctionUrl' --output text
 
 # Point STAGING alias at the new version and create its Function URL
-ENV_ALIAS=staging ./scripts/promote_alias.sh
+$env:ENV_ALIAS='staging'; bash ./scripts/promote_alias.sh
+$env:ENV_ALIAS='prod'; bash ./scripts/promote_alias.sh
 
 
 How promotions work
@@ -74,3 +82,8 @@ Invoke-RestMethod -Uri 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-c
 
 $body = @{ text='hello'; mode='m1' } | ConvertTo-Json
 Invoke-RestMethod -Uri 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/chat/send' -Method POST -Body $body -ContentType 'application/json'
+
+$body = @{ text = 'How are you?' } | ConvertTo-Json
+Invoke-RestMethod -Uri 'http://192.168.2.44:4000/chat/translate' -Method POST -Body $body -ContentType 'application/json'
+
+Invoke-RestMethod -Uri 'hhttps://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/chat/translate' -Method POST -Body $body -ContentType 'application/json'

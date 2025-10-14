@@ -36,7 +36,6 @@ npm run export:web:prod
 
 # or to export without embedding a production API URL:
 npm run export:web
-npm run export:web:prod
 
 # sync to S3
 aws s3 sync .\web-build\ s3://lola-frontend --delete --region $region

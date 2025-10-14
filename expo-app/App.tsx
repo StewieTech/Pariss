@@ -1,35 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView, View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import axios from 'axios';
-
-// Configure API host: prefer EXPO_API_URL env var (set during build or via app config).
-// Example for deployed Lambda Function URL: https://xxxx.lambda-url.ca-central-1.on.aws
-// const EXPO_API_URL = process.env.EXPO_API_URL;
-const EXPO_API_URL = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws';
+const EXPO_API_URL = '';
+// const EXPO_API_URL = '';
 const DEFAULT_LOCAL = 'http://192.168.2.44:4000'; // local dev fallback (no /api/v1 appended yet)
 
-// Compute API base robustly so the app never calls 'undefined'.
-function computeApiBase() {
-  // 1) prefer explicit EXPO_API_URL injected at build time
-  if (EXPO_API_URL && EXPO_API_URL.trim()) return EXPO_API_URL.replace(/\/$/, '');
 
-  // 2) when running as an exported Expo web app, extras can land on window.__EXPO_CONFIG__
-  try {
-    // @ts-ignore - window may not have this in every environment
-    const win: any = typeof window !== 'undefined' ? window : undefined;
-    const expoConfig = win && win.__EXPO_CONFIG__;
-    const extras = expoConfig && expoConfig.extra;
-    if (extras && extras.EXPO_API_URL) return String(extras.EXPO_API_URL).replace(/\/$/, '');
-  } catch (e) {
-    // ignore
-  }
-
-  // 3) fallback to local dev host
-  return DEFAULT_LOCAL;
-}
-
-const API_BASE = computeApiBase();
-// const API = `${API_BASE}/api/v1`;
+const API_BASE = DEFAULT_LOCAL;
 const API = `${API_BASE}`;
 // log the computed API for debugging in the browser console
 if (typeof console !== 'undefined') console.log('Lola Demo API base:', API_BASE);
@@ -38,6 +15,37 @@ export default function App() {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
   const [mode, setMode] = useState<'m1'|'m2'|'m3'>('m1');
+  const [translateOptions, setTranslateOptions] = useState<string[]>([]);
+  const [isTranslating, setIsTranslating] = useState(false);
+
+  function sanitizeVariant(raw: string) {
+    if (!raw) return '';
+    let s = String(raw).trim();
+    // remove code fences
+    s = s.replace(/```(?:\w+)?\n([\s\S]*?)```/i, '$1').trim();
+    s = s.replace(/(^```|```$)/g, '').trim();
+    // remove surrounding brackets if entire string is like ["a","b"]
+    if (/^\[.*\]$/.test(s)) {
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // return first element as a sensible default
+          return String(parsed[0]).trim();
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    // if string is quoted, remove surrounding quotes
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+      s = s.slice(1, -1).trim();
+    }
+    // if prefixed with labels like Casual:, remove label
+    s = s.replace(/^(?:Casual:|casual:|Formal:|formal:|Playful:|playful:)\s*/i, '').trim();
+    // remove stray brackets and commas
+    s = s.replace(/^[\[\]\,\s]+|[\[\]\,\s]+$/g, '').trim();
+    return s;
+  }
 
   useEffect(() => {
     // fetch history
@@ -51,36 +59,63 @@ export default function App() {
     setText('');
     try {
       const res = await axios.post(`${API}/chat/send`, { text: userMsg.content, mode });
-      setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply ?? '' }]);
     } catch (err: any) {
       // log full error for debugging (network, status, response)
-      console.error('API call failed', err);
-      let message = 'Error calling APII';
+        console.error('API call failed', err);
+        let message = 'Error calling API';
       try {
-        if (err.response) {
+          if (err?.response) {
           // axios error with response from server
-          message = `API error ${err.response.status}: ${err.response.data?.error || JSON.stringify(err.response.data)}`;
+            message = `API error ${err.response.status}: ${err.response.data?.error ?? JSON.stringify(err.response.data)}`;
         } else if (err.request) {
           // no response received
           message = 'No response from server (network or CORS)';
         } else {
-          message = String(err.message || err);
+            message = String(err?.message || err);
         }
       } catch (e) {
-        message = String(err);
+        message = String(e);
       }
       setMessages(prev => [...prev, { role: 'assistant', content: message }]);
+    }
+  }
+
+  async function translateFirst() {
+    if (!text) return;
+    setIsTranslating(true);
+    setTranslateOptions([]);
+    try {
+      // Instruct backend to produce three French variants: casual, formal, playful.
+      const res = await axios.post(`${API}/chat/translate`, { text });
+      const variants: string[] = res?.data?.variants ?? [];
+      if (Array.isArray(variants) && variants.length > 0) {
+        // keep labels in the displayed options (e.g. "Casual: ...") so the user sees style
+        setTranslateOptions(variants.slice(0,3));
+      } else {
+        setTranslateOptions([String(res?.data?.variants || '(no variants)')]);
+      }
+    } catch (e) {
+      console.error('TranslateFirst failed', e);
+      setTranslateOptions([`(translation failed) ${String(e)}`]);
+    } finally {
+      setIsTranslating(false);
     }
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Lola Demo</Text>
+        <Text style={styles.title}>Have a Convo with LolaInParis :D Pick a Mode and Start Chatting</Text>
         <View style={styles.modeRow}>
-          {(['m1','m2','m3'] as const).map(m => (
-            <TouchableOpacity key={m} onPress={() => setMode(m)} style={[styles.modeBtn, mode===m && styles.modeBtnActive]}>
-              <Text style={styles.modeText}>{m}</Text>
+          {/* map display labels to mode values */}
+          {([
+            { label: 'm1: LolaChat', value: 'm1' },
+            { label: 'm2', value: 'm2' },
+            { label: 'm3', value: 'm3' }
+          ] as const).map(mb => (
+            <TouchableOpacity key={mb.label} onPress={() => setMode(mb.value)} style={[styles.modeBtn, mode===mb.value && styles.modeBtnActive]}>
+              <Text style={styles.modeText}>{mb.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -98,8 +133,25 @@ export default function App() {
 
       <View style={styles.inputRow}>
         <TextInput style={styles.input} value={text} onChangeText={setText} placeholder="Type..." />
-        <Button title="Send" onPress={send} />
+        <View style={{ flexDirection: 'row' }}>
+          <View style={{ marginRight: 6 }}>
+            <Button title={isTranslating ? 'Translating...' : 'Translate First'} onPress={translateFirst} disabled={isTranslating} />
+          </View>
+          <Button title="Send" onPress={send} />
+        </View>
       </View>
+
+      {/* Private translation options shown only to the user; selecting one inserts it into the input */}
+      {translateOptions.length > 0 && (
+        <View style={styles.translatePanel}>
+          <Text style={{ fontWeight: '600', marginBottom: 6 }}>Choose a translation</Text>
+          {translateOptions.map((opt) => (
+            <TouchableOpacity key={opt} onPress={() => { setText(sanitizeVariant(opt)); setTranslateOptions([]); }} style={styles.translateOption}>
+              <Text>{opt}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -117,4 +169,7 @@ const styles = StyleSheet.create({
   assistantBubble: { backgroundColor: '#f1f0f0', alignSelf: 'flex-start' },
   inputRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   input: { flex: 1, borderWidth: 1, borderColor: '#ddd', padding: 8, borderRadius: 6, marginRight: 8 }
+  ,
+  translatePanel: { padding: 10, backgroundColor: '#fff8e6', borderRadius: 8, marginTop: 10 },
+  translateOption: { padding: 10, borderRadius: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: '#eee', marginBottom: 8 }
 });

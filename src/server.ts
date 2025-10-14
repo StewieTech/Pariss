@@ -14,7 +14,8 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/_health', (req, res) => res.json({ status: 'ok' }));
-app.use('/api/v1/chat', chatRouter);
+// app.use('/api/v1/chat', chatRouter);
+app.use('/chat', chatRouter);
 app.use('/api/v1', miscRouter);
 
 const PORT = process.env.PORT || 4000;
