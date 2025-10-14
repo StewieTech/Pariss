@@ -47,7 +47,14 @@ export async function postTranslate(req: Request, res: Response) {
         try {
           const parsed = JSON.parse(jsonChunk);
           if (Array.isArray(parsed)) {
-            variants = parsed.map((v: any) => String(v));
+            variants = parsed.map((v: any) => {
+              if (v == null) return '';
+              if (typeof v === 'string') return v;
+              if (typeof v === 'object') {
+                return String(v.text ?? v.reply ?? v.content ?? JSON.stringify(v));
+              }
+              return String(v);
+            });
           }
         } catch (jsonErr) {
           // fall through to other parsing strategies
@@ -84,7 +91,7 @@ export async function postTranslate(req: Request, res: Response) {
         variants = candidate.split(/\r?\n/)
           .map((s: string) => s.trim())
           .filter(Boolean)
-          .filter(l => !/^```/.test(l) && l !== '[' && l !== ']')
+          .filter(l => !l.startsWith('```') && l !== '[' && l !== ']')
           .slice(0,3);
       }
     } catch (parseErr) {
