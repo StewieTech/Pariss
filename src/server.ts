@@ -27,6 +27,8 @@ connectDb()
     app.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
   })
   .catch((err) => {
-    logger.error('Failed to start', err);
+  // also print the error to stderr so the dev terminal shows the full stack
+  console.error('Failed to start (stack):', err);
+  logger.error('Failed to start', err);
     process.exit(1);
   });

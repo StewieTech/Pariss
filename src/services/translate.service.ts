@@ -9,7 +9,7 @@ function getOpenAIClient() {
 export async function translateOnly({ prompt }: { prompt: string }) {
   // This function intentionally does NOT include chat history or the global MASTER_PROMPT.
   // It uses a minimal neutral system message to keep translations deterministic and isolated.
-  const system = [{ role: 'system', content: 'You are a helpful translator. Return only the requested translations.' }];
+  const system = [{ role: 'system' as const, content: 'You are a helpful translator. Return only the requested translations.' }];
 
   const client = getOpenAIClient();
   const resp = await client.chat.completions.create({
@@ -17,7 +17,7 @@ export async function translateOnly({ prompt }: { prompt: string }) {
     model: 'gpt-4o-mini',
     messages: [
       ...system,
-      { role: 'user', content: prompt }
+      { role: 'user' as const, content: prompt }
     ],
     temperature: 0.2,
     // max_completion_tokens: 400
