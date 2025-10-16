@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView, View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity, ScrollView, Share, Platform } from 'react-native';
 import axios from 'axios';
-const EXPO_API_URL = '';
+const EXPO_API_URL = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws';
 // const EXPO_API_URL = '';
 const DEFAULT_LOCAL = 'http://192.168.2.44:4000'; // local dev fallback (no /api/v1 appended yet)
 
 
-const API_BASE = DEFAULT_LOCAL;
+const API_BASE = EXPO_API_URL ;
+// const API_BASE = DEFAULT_LOCAL ;
+// const API_BASE = EXPO_API_URL || DEFAULT_LOCAL;
 const API = `${API_BASE}`;
 // log the computed API for debugging in the browser console
 if (typeof console !== 'undefined') console.log('Lola Demo API base:', API_BASE);
@@ -141,7 +143,7 @@ function PvE() {
           {([
             { label: 'm1: LolaChat', value: 'm1' },
             { label: 'm2', value: 'm2' },
-            { label: 'm3', value: 'm3' }
+            { label: 'm3: LolaVoice', value: 'm3' }
           ] as const).map(mb => (
             <TouchableOpacity key={mb.label} onPress={() => setMode(mb.value)} style={[styles.modeBtn, mode===mb.value && styles.modeBtnActive]}>
               <Text style={styles.modeText}>{mb.label}</Text>

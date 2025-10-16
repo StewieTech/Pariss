@@ -1,6 +1,8 @@
 import type { APIGatewayProxyResult, Context } from 'aws-lambda';
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { handleChat } from '../../src/services/chat.service';
+import { postTranslate } from '../../src/controllers/chat.controller';
+import { createRoom, joinRoom, postMessage, getRoomState, suggestReplies } from '../../src/controllers/pvp.controller';
 
 type Req = {
   rawPath?: string;
@@ -51,6 +53,18 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
   const path = event?.rawPath || event?.requestContext?.http?.path || "/";
 
   if (method === "OPTIONS") return json(204, {});
+
+  // Ensure OPENAI key is available for all routes by reading SSM for the current env alias
+  try {
+    const envAlias = process.env.ENV_ALIAS || 'staging';
+    const keyPath = `/lola/${envAlias}/OPENAI_API_KEY`;
+    if (!process.env.OPENAI_API_KEY) {
+      const s = await getParam(keyPath, true);
+      if (s) process.env.OPENAI_API_KEY = s;
+    }
+  } catch (e) {
+    // ignore; controllers will handle missing key
+  }
 
   if (path === "/health") {
     return json(200, { ok: true, env: process.env.ENV_ALIAS || "unknown" });
@@ -105,6 +119,81 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       const errorId = shortId('e_chat_');
       log('error', 'chat service error', { errorId, err: String(err) });
       return json(500, { error: 'chat service failed', details: err?.message ?? String(err), errorId });
+    }
+  }
+
+  // Adapter to call existing Express-style controllers that use (req,res)
+  async function callController(fn: any, event: Req) {
+    let out: any = undefined;
+    const reqLike: any = {
+      params: ({} as any),
+      body: undefined,
+      query: {},
+      get: (h: string) => event.headers?.[h.toLowerCase()]
+    };
+    // populate params from path if present (e.g. /pvp/:id/...)
+    try { reqLike.body = event.body ? JSON.parse(event.body) : {}; } catch { reqLike.body = {}; }
+    // crude param extraction for /pvp/:id paths
+    const pvpMatch = path.match(/^\/pvp\/(.+?)(?:\/|$)(.*)/);
+    if (pvpMatch) {
+      const maybeId = pvpMatch[1];
+      reqLike.params.id = maybeId;
+      // if further subpath present, set reqLike.path
+      reqLike._sub = pvpMatch[2] || '';
+    }
+
+    const resLike: any = {
+      status: (s: number) => ({ json: (d: any) => { out = { __status: s, body: d }; } }),
+      json: (d: any) => { out = d; }
+    };
+
+    // call and await in case controller is async
+    await Promise.resolve(fn(reqLike, resLike));
+    return out;
+  }
+
+  // /chat/translate
+  if (path === '/chat/translate' && method === 'POST') {
+    try {
+      const result = await callController(postTranslate, event);
+      if (result && result.__status) return json(result.__status, result.body);
+      return json(200, result ?? {});
+    } catch (err: any) {
+      return json(500, { error: String(err) });
+    }
+  }
+
+  // pvp routes: create, join, message, get state, suggest
+  if (path.startsWith('/pvp')) {
+    try {
+      // route to specific handlers
+      if (path === '/pvp/create' && method === 'POST') {
+        const out = await callController(createRoom, event);
+        return json(200, out ?? {});
+      }
+      // /pvp/:id/join
+      if (/^\/pvp\/[^\/]+\/join$/.test(path) && method === 'POST') {
+        const out = await callController(joinRoom, event);
+        return json(200, out ?? {});
+      }
+      // /pvp/:id/message
+      if (/^\/pvp\/[^\/]+\/message$/.test(path) && method === 'POST') {
+        const out = await callController(postMessage, event);
+        return json(200, out ?? {});
+      }
+      // GET /pvp/:id
+      if (/^\/pvp\/[^\/]+$/.test(path) && method === 'GET') {
+        const out = await callController(getRoomState, event);
+        return json(200, out ?? {});
+      }
+      // /pvp/:id/suggest
+      if (/^\/pvp\/[^\/]+\/suggest$/.test(path) && method === 'POST') {
+        const out = await callController(suggestReplies, event);
+        if (out && out.__status) return json(out.__status, out.body);
+        return json(200, out ?? {});
+      }
+    } catch (err: any) {
+      return json(500, { error: String(err) });
     }
   }
 

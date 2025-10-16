@@ -19,10 +19,11 @@ aws sts get-caller-identity --profile asklolaai
 
 $env:AWS_PROFILE='asklolaai'
 $region='ca-central-1'
+$bucket='lola-prod'
 $bucket='lola-frontend'
 
 aws s3api create-bucket --bucket $bucket --region $region --create-bucket-configuration LocationConstraint=$region
-aws s3api put-public-access-block --bucket $bucket --public-access-block-configuration 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true' --region $region
+aws s3api put-public-access-block --bucket $bucket --public-access-block-configuration 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=False,RestrictPublicBuckets=true' --region $region
 aws s3api put-bucket-encryption --bucket $bucket --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}' --region $region
 
 ## Build
@@ -32,19 +33,21 @@ npm ci
 
 # For a production static export that points to your deployed Lambda backend run:
 # This sets EXPO_API_URL so the built app calls your deployed function
-npm run export:web:prod
+<!-- npm run export:web:prod -->
 
 # or to export without embedding a production API URL:
 npm run export:web
 
 # sync to S3
 aws s3 sync .\web-build\ s3://lola-frontend --delete --region $region
+aws s3 sync .\web-build\ s3://lola-prod --delete --region $region
 
 
 # Setup Steps
 
 ## enable static website hosting (optional; S3 website has HTTP only)
 aws s3 website s3://lola-frontend --index-document index.html --error-document index.html
+aws s3 website s3://lola-prod --index-document index.html --error-document index.html
 
 ## S3 website URL:
 Write-Output "http://$bucket.s3-website-$region.amazonaws.com"
@@ -60,9 +63,6 @@ https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/
 
 # ToDo
 
-# Prototype
-- Have a working app for Delly and Kennick to Test
-- fix lambda server functions
 
 # MVP
 - Have all three staging prod and preprod versions working

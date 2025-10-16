@@ -20,9 +20,9 @@ aws sts get-caller-identity --region ca-central-1
 aws configure --profile asklolaai
 $env:AWS_PROFILE = 'asklolaai'
 $region = 'ca-central-1'
-$bucket = 'lolalingo-staging-serverlessdeploymentbucket-dbxctmcuvqve'
 $func='lola-api'
 
+$bucket = 'lolalingo-staging-serverlessdeploymentbucket-dbxctmcuvqve'
 # create bucket
 aws s3api create-bucket --bucket $bucket --region $region --create-bucket-configuration LocationConstraint=$region
 
@@ -55,11 +55,14 @@ aws s3 sync .\web-build\ s3://lola-frontend-prod --delete --region ca-central-1
 # publish + alias + alias-URL (promote script)
 ## This publishes a new version apparently
 $ver = aws lambda publish-version --function-name lola-api --region $region --query 'Version' --output text
+$ver = aws lambda publish-version --function-name lola-prod --region $region --query 'Version' --output text
 
 ## here is where I would change the name to staging | prod | preprod -> this creates or updates alias
-aws lambda create-alias --function-name lola-api --name prod --function-version $ver --region $region 2>$null || aws lambda update-alias --function-name lola-api --name staging --function-version $ver --region $region
+aws lambda create-alias --function-name lola-api --name lola-prod --function-version $ver --region $region 2>$null || aws lambda update-alias --function-name lola-prod --name staging --function-version $ver --region $region
 
-aws lambda create-function-url-config --function-name lola-api --qualifier prod --auth-type NONE --cors 'AllowOrigins=["*"],AllowMethods=["GET","POST","OPTIONS"],AllowHeaders=["*"]' --region $region --query 'FunctionUrl' --output text
+aws lambda get-function-url-config --function-name lola-api --qualifier staging --profile asklolaai --region ca-central-1
+
+aws lambda create-function-url-config --function-name lola-prod --qualifier lola-prod --auth-type NONE --cors 'AllowOrigins=["*"],AllowMethods=["GET","POST","OPTIONS"],AllowHeaders=["*"]' --region $region --query 'FunctionUrl' --output text
 
 # Point STAGING alias at the new version and create its Function URL
 $env:ENV_ALIAS='staging'; bash ./scripts/promote_alias.sh
