@@ -3,6 +3,7 @@ import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { handleChat } from '../../src/services/chat.service';
 import { postTranslate } from '../../src/controllers/chat.controller';
 import { createRoom, joinRoom, postMessage, getRoomState, suggestReplies } from '../../src/controllers/pvp.controller';
+import { synthesize } from '../../src/services/voice.service';
 
 type Req = {
   rawPath?: string;
@@ -180,6 +181,49 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       const errorId = shortId('e_translate_');
       log('error', 'translate route error', { errorId, err: String(err) });
       return json(500, { error: String(err), errorId });
+    }
+  }
+
+  // /chat/tts -> returns binary audio (base64) from ElevenLabs
+  if (path === '/chat/tts' && method === 'POST') {
+    try {
+      let payload: any = {};
+      try { payload = event.body ? JSON.parse(event.body) : {}; } catch { payload = {}; }
+      const text = String(payload?.text || payload?.input || '');
+      const voiceId = String(payload?.voiceId || process.env.ELEVEN_VOICE_ID || '');
+
+      if (!text) return json(400, { error: 'missing text in request body' });
+
+      const envAlias = process.env.ENV_ALIAS || 'staging';
+      const keyPath = `/lola/${envAlias}/ELEVEN_API_KEY`;
+      const elevenKey = await getParam(keyPath, true);
+      if (!elevenKey) {
+        const errorId = shortId('e_ssm_');
+        log('error', 'ELEVEN key missing from SSM', { errorId, keyPath, envAlias });
+        return json(200, { error: 'ELEVEN key not found in SSM for this environment', envAlias, errorId });
+      }
+
+      process.env.ELEVEN_API_KEY = elevenKey;
+
+      // call service
+      const out = await synthesize(text, voiceId || '');
+      const bodyBase64 = out.buffer.toString('base64');
+      // return binary response with proper headers
+      return {
+        statusCode: 200,
+        isBase64Encoded: true,
+        headers: {
+          'content-type': out.contentType,
+          'access-control-allow-origin': '*',
+          'access-control-allow-methods': 'GET,POST,OPTIONS',
+          'access-control-allow-headers': '*'
+        },
+        body: bodyBase64
+      };
+    } catch (err: any) {
+      const errorId = shortId('e_tts_');
+      log('error', 'tts route error', { errorId, err: String(err) });
+      return json(500, { error: 'tts failed', details: err?.message ?? String(err), errorId });
     }
   }
 

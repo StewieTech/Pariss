@@ -1,7 +1,33 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView, View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity, ScrollView, Share, Platform } from 'react-native';
 import { speakText } from './app/services/voice';
-import axios from 'axios';
+// Normalize axios import shape for various bundlers/runtime environments.
+// Some bundlers export axios as the default, others as a namespace with a `default` property.
+// Import defensively and normalize to `Axios` so later code can call Axios.post/get safely.
+// Use a small fetch-based client instead of relying on axios to avoid bundler/module-shape issues.
+// This keeps network calls simple and reliable across environments (web / expo / metro).
+const client = {
+  post: async (url: string, body?: any) => {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body != null ? JSON.stringify(body) : undefined,
+    });
+    const text = await resp.text().catch(() => null);
+    let data: any = null;
+    try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+    return { data, status: resp.status, ok: resp.ok, text };
+  },
+  get: async (url: string) => {
+    const resp = await fetch(url, { method: 'GET' });
+    const text = await resp.text().catch(() => null);
+    let data: any = null;
+    try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+    return { data, status: resp.status, ok: resp.ok, text };
+  }
+};
+console.log('using fetch-based client for network requests');
+
 import { sanitizeVariant, parseRoomIdFromRaw } from './app/lib/utils';
 import NavBar from './app/components/NavBar';
 import MainMenu from './app/components/MainMenu';
@@ -50,7 +76,7 @@ function PvE() {
 
   // ...existing chat logic moved here...
   // useEffect(() => {
-  //   axios.get(`${API}/history?limit=20`).then(r => setMessages(r.data.messages.reverse())).catch(()=>{});
+  //   Axios.get(`${API}/history?limit=20`).then((r: any) => setMessages(r.data.messages.reverse())).catch(()=>{});
   // }, []);
 
   // using shared sanitizeVariant from app/lib/utils
@@ -61,8 +87,8 @@ function PvE() {
     setMessages(prev => [...prev, userMsg]);
     setText('');
     try {
-      const res = await axios.post(`${API}/chat/send`, { text: userMsg.content, mode });
-      setMessages(prev => [...prev, { role: 'assistant', content: res.data.reply ?? '' }]);
+      const res = await client.post(`${API}/chat/send`, { text: userMsg.content, mode });
+      setMessages(prev => [...prev, { role: 'assistant', content: res.data?.reply ?? '' }]);
     } catch (err: any) {
       console.error('API call failed', err);
       let message = 'Error calling API';
@@ -75,7 +101,7 @@ function PvE() {
     if (!text) return;
     setIsTranslating(true); setTranslateOptions([]);
     try {
-      const res = await axios.post(`${API}/chat/translate`, { text });
+      const res = await client.post(`${API}/chat/translate`, { text });
       const variants: string[] = res?.data?.variants ?? [];
       if (Array.isArray(variants) && variants.length > 0) setTranslateOptions(variants.slice(0,3)); else setTranslateOptions([String(res?.data?.variants || '(no variants)')]);
     } catch (e) { console.error('TranslateFirst failed', e); setTranslateOptions([`(translation failed) ${String(e)}`]); } finally { setIsTranslating(false); }
@@ -90,7 +116,7 @@ function PvE() {
           {([
             { label: 'm1: LolaChat', value: 'm1' },
             { label: 'm2', value: 'm2' },
-            { label: 'm3: LolaVoice', value: 'm3' }
+            { label: 'm3: $ LolaVoice', value: 'm3' }
           ] as const).map(mb => (
             <TouchableOpacity key={mb.label} onPress={() => setMode(mb.value)} style={[styles.modeBtn, mode===mb.value && styles.modeBtnActive]}>
               <Text style={styles.modeText}>{mb.label}</Text>
@@ -98,20 +124,22 @@ function PvE() {
           ))}
         </View>
       </View>
-       
-       
-       {/* , index
-          
-            
-            {item.role === 'assistant' && mode === 'm3' && (
-              <TouchableOpacity testID={`speak-${index}`} onPress={() => speakText(item.content)} style={{ marginTop: 6 }}>
-                <Text accessibilityLabel={`speak-${index}`}>🔊</Text>
-              </TouchableOpacity>
-            )} */}
-          
         
      
-      <FlatList data={messages} keyExtractor={(i,idx)=>String(idx)} renderItem={({item}) => (<View style={[styles.bubble, item.role==='user' ? styles.userBubble : styles.assistantBubble]}><Text>{item.content}</Text></View>)} />
+      <FlatList
+        data={messages}
+        keyExtractor={(i, idx) => String(idx)}
+        renderItem={({ item, index }) => (
+          <View style={[styles.bubble, item?.role === 'user' ? styles.userBubble : styles.assistantBubble]}>
+            <Text>{item?.content}</Text>
+            {item?.role === 'assistant' && mode === 'm3' && (
+              <TouchableOpacity testID={`speak-${index}`} onPress={() => speakText(item?.content)} style={{ marginTop: 6 }}>
+                <Text accessibilityLabel={`speak-${index}`}>🔊</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      />
       <View style={styles.inputRow}>
         <TextInput style={styles.input} value={text} onChangeText={setText} placeholder="Type..." />
         <View style={{ flexDirection: 'row' }}>
@@ -146,7 +174,7 @@ function PvP() {
   async function getSuggestions() {
     if (!input) return;
     try {
-      const res = await axios.post(`${API}/chat/translate`, { text: input });
+      const res = await client.post(`${API}/chat/translate`, { text: input });
       const variants: string[] = res?.data?.variants ?? [];
       setSuggestions(variants.slice(0,3));
     } catch (e) { setSuggestions([`(failed) ${String(e)}`]); }
@@ -154,7 +182,7 @@ function PvP() {
 
   async function createRoom() {
     try {
-      const res = await axios.post(`${API}/pvp/create`, {});
+      const res = await client.post(`${API}/pvp/create`, {});
       const id = res?.data?.roomId;
       const path = res?.data?.joinPath;
       setCreatedRoom(id || null);
@@ -168,7 +196,7 @@ function PvP() {
     const roomId = id || createdRoom;
     if (!roomId || !name) return;
     try {
-      const res = await axios.post(`${API}/pvp/${roomId}/join`, { name });
+      const res = await client.post(`${API}/pvp/${roomId}/join`, { name });
       setJoinedRoom(roomId);
       setParticipants(res.data.participants || []);
       setMessagesLive(res.data.messages || []);
@@ -176,7 +204,7 @@ function PvP() {
       if (pollHandle) clearInterval(pollHandle);
       const h = setInterval(async () => {
         try {
-          const s = await axios.get(`${API}/pvp/${roomId}`);
+          const s = await client.get(`${API}/pvp/${roomId}`);
           setParticipants(s.data.participants || []);
           setMessagesLive(s.data.messages || []);
         } catch (er) {
@@ -201,7 +229,7 @@ function PvP() {
     const txt = (text ?? input) || '';
     if (!roomId || !name || !txt) return;
     try {
-      const res = await axios.post(`${API}/pvp/${roomId}/message`, { name, text: txt });
+      const res = await client.post(`${API}/pvp/${roomId}/message`, { name, text: txt });
       // optimistic append
       setMessagesLive(prev => [...prev, res.data.message]);
       setInput('');
@@ -286,7 +314,7 @@ function PvP() {
                 <Button title="Translate First" onPress={async () => {
                   if (!input) return;
                   try {
-                    const r = await axios.post(`${API}/chat/translate`, { text: input });
+                    const r = await client.post(`${API}/chat/translate`, { text: input });
                     const variants: string[] = r?.data?.variants ?? [];
                     setTranslateOptionsRoom(variants.slice(0,3));
                   } catch (e) { console.error('translate in room failed', e); }
@@ -297,7 +325,7 @@ function PvP() {
                   try {
                     const id = joinedRoom || createdRoom;
                     if (!id) return;
-                    const r = await axios.post(`${API}/pvp/${id}/suggest`, { text: input });
+                    const r = await client.post(`${API}/pvp/${id}/suggest`, { text: input });
                     const vars: string[] = r?.data?.variants ?? [];
                     // show as quick options below
                     if (vars.length) {
