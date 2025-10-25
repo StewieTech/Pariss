@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView, View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity, ScrollView, Share, Platform } from 'react-native';
 import axios from 'axios';
+import { sanitizeVariant, parseRoomIdFromRaw } from './app/lib/utils';
+import NavBar from './app/components/NavBar';
+import MainMenu from './app/components/MainMenu';
 const EXPO_API_URL = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws';
 // const EXPO_API_URL = '';
 const DEFAULT_LOCAL = 'http://192.168.2.44:4000'; // local dev fallback (no /api/v1 appended yet)
@@ -13,33 +16,7 @@ const API = `${API_BASE}`;
 // log the computed API for debugging in the browser console
 if (typeof console !== 'undefined') console.log('Lola Demo API base:', API_BASE);
 
-function sanitizeVariant(raw: string) {
-  if (!raw) return '';
-  let s = String(raw).trim();
-  // remove code fences
-  s = s.replace(/```(?:\w+)?\n([\s\S]*?)```/i, '$1').trim();
-  s = s.replace(/(^```|```$)/g, '').trim();
-  // remove surrounding brackets if entire string is like ["a","b"]
-  if (/^\[.*\]$/.test(s)) {
-    try {
-      const parsed = JSON.parse(s);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return String(parsed[0]).trim();
-      }
-    } catch (e) {
-      // ignore
-    }
-  }
-  // if string is quoted, remove surrounding quotes
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
-    s = s.slice(1, -1).trim();
-  }
-  // if prefixed with labels like Casual:, remove label
-  s = s.replace(/^(?:Casual:|casual:|Formal:|formal:|Playful:|playful:)\s*/i, '').trim();
-  // remove stray brackets and commas
-  s = s.replace(/^[\[\]\,\s]+|[\[\]\,\s]+$/g, '').trim();
-  return s;
-}
+// sanitizeVariant moved to app/lib/utils.ts and imported above
 
 export default function App() {
   const [screen, setScreen] = useState<'main'|'pve'|'pvp'>('main');
@@ -55,32 +32,7 @@ export default function App() {
 }
 
 
-function NavBar({ current, onNav }: { current: string; onNav: (s: any) => void }) {
-  return (
-    <View style={styles.navbar}>
-      <TouchableOpacity onPress={() => onNav('main')}><Text style={styles.navText}>Main</Text></TouchableOpacity>
-      <TouchableOpacity onPress={() => onNav('pve')}><Text style={[styles.navText, current==='pve' && styles.navTextActive]}>Talk to Lola</Text></TouchableOpacity>
-      <TouchableOpacity onPress={() => onNav('pvp')}><Text style={[styles.navText, current==='pvp' && styles.navTextActive]}>Talk to Friends</Text></TouchableOpacity>
-    </View>
-  );
-}
-
-function MainMenu({ onChoose }: { onChoose: (s: any) => void }) {
-  return (
-    <View style={styles.mainMenu}>
-      <Text style={styles.title}>LolaInParis</Text>
-      <Text style={styles.subtitle}>Pick a mode</Text>
-      <View style={{ marginTop: 16 }}>
-        <TouchableOpacity style={styles.menuBtn} onPress={() => onChoose('pve')}>
-          <Text style={styles.menuText}>Player vs Environment — Talk to Lola</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.menuBtn} onPress={() => onChoose('pvp')}>
-          <Text style={styles.menuText}>Player vs Player — Talk to Friends</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
+// NavBar and MainMenu extracted to app/components for testability
 
 function PvE() {
   const [text, setText] = useState('');
@@ -94,19 +46,7 @@ function PvE() {
     axios.get(`${API}/history?limit=20`).then(r => setMessages(r.data.messages.reverse())).catch(()=>{});
   }, []);
 
-  function sanitizeVariant(raw: string) {
-    if (!raw) return '';
-    let s = String(raw).trim();
-    s = s.replace(/```(?:\w+)?\n([\s\S]*?)```/i, '$1').trim();
-    s = s.replace(/(^```|```$)/g, '').trim();
-    if (/^\[.*\]$/.test(s)) {
-      try { const parsed = JSON.parse(s); if (Array.isArray(parsed) && parsed.length>0) return String(parsed[0]).trim(); } catch(e){}
-    }
-    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) s = s.slice(1,-1).trim();
-    s = s.replace(/^(?:Casual:|casual:|Formal:|formal:|Playful:|playful:)\s*/i, '').trim();
-    s = s.replace(/^[\[\]\,\s]+|[\[\]\,\s]+$/g, '').trim();
-    return s;
-  }
+  // using shared sanitizeVariant from app/lib/utils
 
   async function send() {
     if (!text) return;
@@ -274,19 +214,7 @@ function PvP() {
                   if (!name?.trim()) { alert('Enter a display name before joining'); return; }
                   const raw = (joinInput || '').trim();
                   if (!raw) return alert('Paste a link or room id first');
-                  // If user pasted a full URL ending with /pvp/:id or contains /pvp/:id, extract id
-                  let id = raw;
-                  try {
-                    const u = new URL(raw);
-                    // path may be like /pvp/:id
-                    const parts = u.pathname.split('/').filter(Boolean);
-                    const idx = parts.indexOf('pvp');
-                    if (idx !== -1 && parts.length > idx+1) id = parts[idx+1]; else id = parts[parts.length-1] || id;
-                  } catch(e) {
-                    console.warn('join id parse failed, assuming raw id', e);
-                    // not a full URL, assume raw id
-                    id = raw.replace(/[^a-z0-9\-_.]/ig,'');
-                  }
+                  const id = parseRoomIdFromRaw(raw);
                   joinExistingRoom(id);
                 }} />
               </View>
