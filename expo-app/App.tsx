@@ -6,8 +6,8 @@ const EXPO_API_URL = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-cen
 const DEFAULT_LOCAL = 'http://192.168.2.44:4000'; // local dev fallback (no /api/v1 appended yet)
 
 
-const API_BASE = EXPO_API_URL ;
-// const API_BASE = DEFAULT_LOCAL ;
+// const API_BASE = EXPO_API_URL ;
+const API_BASE = DEFAULT_LOCAL ;
 // const API_BASE = EXPO_API_URL || DEFAULT_LOCAL;
 const API = `${API_BASE}`;
 // log the computed API for debugging in the browser console

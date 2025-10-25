@@ -155,11 +155,31 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
   // /chat/translate
   if (path === '/chat/translate' && method === 'POST') {
     try {
+      const envAlias = process.env.ENV_ALIAS || 'staging';
+      const keyPath = `/lola/${envAlias}/OPENAI_API_KEY`;
+      const openaiKey = await getParam(keyPath, true);
+
+      if (!openaiKey) {
+        const errorId = shortId('e_ssm_');
+        log('error', 'OPENAI key missing from SSM for translate route', { errorId, keyPath, envAlias });
+        return json(200, {
+          error: "OPENAI key not found in SSM for this environment",
+          envAlias,
+          hasOpenAIKey: false,
+          errorId
+        });
+      }
+
+      // inject for downstream controllers/services that read process.env
+      process.env.OPENAI_API_KEY = openaiKey;
+
       const result = await callController(postTranslate, event);
       if (result && result.__status) return json(result.__status, result.body);
       return json(200, result ?? {});
     } catch (err: any) {
-      return json(500, { error: String(err) });
+      const errorId = shortId('e_translate_');
+      log('error', 'translate route error', { errorId, err: String(err) });
+      return json(500, { error: String(err), errorId });
     }
   }
 
