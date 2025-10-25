@@ -90,3 +90,10 @@ $body = @{ text = 'How are you?' } | ConvertTo-Json
 Invoke-RestMethod -Uri 'http://192.168.2.44:4000/chat/translate' -Method POST -Body $body -ContentType 'application/json'
 
 Invoke-RestMethod -Uri 'hhttps://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/chat/translate' -Method POST -Body $body -ContentType 'application/json'
+
+
+http://192.168.2.44:4000
+
+# call endpoint, get base64 text, write to file
+$b64 = Invoke-RestMethod -Method Post -Uri http://192.168.2.44:4000/chat/tts -Body (@{ text = 'Bonjour'; voiceId = 'LEnmbrrxYsUYS7vsRRwD' } | ConvertTo-Json) -ContentType 'application/json'
+[System.IO.File]::WriteAllBytes('bonjour.mp3',[Convert]::FromBase64String($b64))

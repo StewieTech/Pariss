@@ -8,6 +8,7 @@
     "@types/react": "~18.2.14",
     "axios": "^1.4.0",
     "expo": "~54.0.0",
+    "expo-av": "^16.0.7",
     "expo-status-bar": "~1.6.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
@@ -21,7 +22,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-  "smoke": "node ./scripts/smoketest.js",
+    "smoke": "node ./scripts/smoketest.js",
     "export:web": "expo export:web",
     "export:web:prod": "cross-env EXPO_API_URL=https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws expo export:web"
   },
