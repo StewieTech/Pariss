@@ -1,0 +1,5 @@
+# Local env file
+.env
+
+# Node modules (if not already ignored at repo root)
+node_modules/

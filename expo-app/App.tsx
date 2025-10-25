@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView, View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity, ScrollView, Share, Platform } from 'react-native';
+import { speakText } from './app/services/voice';
 import axios from 'axios';
 import { sanitizeVariant, parseRoomIdFromRaw } from './app/lib/utils';
 import NavBar from './app/components/NavBar';
@@ -91,7 +92,20 @@ function PvE() {
           ))}
         </View>
       </View>
-      <FlatList data={messages} keyExtractor={(i,idx)=>String(idx)} renderItem={({item}) => (<View style={[styles.bubble, item.role==='user' ? styles.userBubble : styles.assistantBubble]}><Text>{item.content}</Text></View>)} />
+      <FlatList
+        data={messages}
+        keyExtractor={(i,idx)=>String(idx)}
+        renderItem={({item, index}) => (
+          <View style={[styles.bubble, item.role==='user' ? styles.userBubble : styles.assistantBubble]}>
+            <Text>{item.content}</Text>
+            {item.role === 'assistant' && mode === 'm3' && (
+              <TouchableOpacity testID={`speak-${index}`} onPress={() => speakText(item.content)} style={{ marginTop: 6 }}>
+                <Text accessibilityLabel={`speak-${index}`}>🔊</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      />
       <View style={styles.inputRow}>
         <TextInput style={styles.input} value={text} onChangeText={setText} placeholder="Type..." />
         <View style={{ flexDirection: 'row' }}>
