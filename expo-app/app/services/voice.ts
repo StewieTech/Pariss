@@ -10,9 +10,33 @@ import { Audio } from 'expo-av';
 export async function speakText(text: string, voiceId = 'LEnmbrrxYsUYS7vsRRwD', apiBase?: string): Promise<void> {
   if (!text) return;
 
-  // Resolve API base: prefer explicit arg, then global EXPO_API_URL, then empty (relative)
-//   const resolvedBase = apiBase || (globalThis as any)?.EXPO_API_URL || '';
-  const resolvedBase = 'http://192.168.2.44:4000';
+  // Resolve API base priority:
+  // 1) explicit apiBase arg
+  // 2) global EXPO_API_URL (set by deploy or by developer)
+  // 3) runtime detection: if running in a browser and hostname looks local -> use local dev server
+  // 4) otherwise fall back to deployed Function URL
+  const DEFAULT_DEPLOYED = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws';
+
+  const explicit = apiBase;
+  const globalUrl = (globalThis as any)?.EXPO_API_URL;
+
+  const looksLikeLocalHost = (host: string) => {
+    if (!host) return false;
+    return host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.') || host.startsWith('10.');
+  };
+
+  let resolvedBase = explicit || globalUrl || '';
+  if (!resolvedBase) {
+    if (typeof window !== 'undefined' && (window as any).location) {
+      const host = (window as any).location.hostname || '';
+      console.log('looksLikeLocalHost check, host:', host, 'result:', looksLikeLocalHost(host), 'globalUrl:', globalUrl);
+      resolvedBase = looksLikeLocalHost(host) ? 'http://192.168.2.44:4000' : DEFAULT_DEPLOYED;
+    } else {
+      // Native (Expo) or no window: prefer globalUrl if available, otherwise assume deployed
+      resolvedBase = globalUrl || DEFAULT_DEPLOYED;
+    }
+  }
+
   const url = resolvedBase ? `${resolvedBase.replace(/\/$/, '')}/chat/tts` : '/chat/tts';
 
   const resp = await fetch(url, {
@@ -28,13 +52,29 @@ export async function speakText(text: string, voiceId = 'LEnmbrrxYsUYS7vsRRwD', 
 
   // Handler returns base64-encoded audio in the body
   const b64 = await resp.text();
+  const contentType = resp.headers.get('content-type') || '';
+
+  // If server returned JSON (error object) or a non-audio content type, surface a clear error
+  if (contentType.includes('application/json') || contentType.includes('text/plain') && b64.trim().startsWith('{')) {
+    let parsed: any = null;
+    try { parsed = JSON.parse(b64); } catch (e) { /* ignore */ }
+    const msg = parsed?.error || parsed?.message || b64 || 'TTS returned non-audio response';
+    throw new Error(`TTS server error: ${msg}`);
+  }
 
   if (Platform.OS === 'web') {
     // decode base64 to binary, create Blob and play via HTMLAudioElement
-    const binary = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-    const blob = new Blob([binary], { type: 'audio/mpeg' });
+    let binary: Uint8Array;
+    try {
+      // atob may throw if input is not valid base64
+      binary = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    } catch (e: any) {
+      // Surface readable error instead of uncaught InvalidCharacterError
+      throw new Error(`TTS decode failed: invalid base64 returned by server (${String(e?.message || e)})`);
+    }
+    const blob = new Blob([binary], { type: contentType || 'audio/mpeg' });
     const objectUrl = URL.createObjectURL(blob);
-    const audio = new (window as any).Audio(objectUrl);
+    const audio = new (globalThis as any).Audio(objectUrl);
     await audio.play();
     audio.addEventListener('ended', () => { URL.revokeObjectURL(objectUrl); });
   } else {

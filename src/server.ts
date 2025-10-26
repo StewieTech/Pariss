@@ -31,6 +31,13 @@ connectDb()
     app.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
   })
   .catch((err) => {
-    logger.error('Failed to start', err);
+    // include error details and stack for easier local debugging
+    try {
+      logger.error({ err: err && (err.stack || err.message || err) }, 'Failed to start');
+    } catch (logErr) {
+      // fallback simple log
+      // eslint-disable-next-line no-console
+      console.error('Failed to start', err);
+    }
     process.exit(1);
   });

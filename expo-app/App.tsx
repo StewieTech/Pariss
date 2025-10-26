@@ -31,14 +31,14 @@ console.log('using fetch-based client for network requests');
 import { sanitizeVariant, parseRoomIdFromRaw } from './app/lib/utils';
 import NavBar from './app/components/NavBar';
 import MainMenu from './app/components/MainMenu';
-const EXPO_API_URL = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws';
-// const EXPO_API_URL = '';
-const DEFAULT_LOCAL = 'http://192.168.2.44:4000'; // local dev fallback (no /api/v1 appended yet)
+// Deployed function URL (used when not running locally)
+const DEFAULT_DEPLOYED = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws';
+const DEFAULT_LOCAL = 'http://192.168.2.44:4000'; // local dev server
 
-
-// const API_BASE = EXPO_API_URL ;
-const API_BASE = DEFAULT_LOCAL ;
-// const API_BASE = EXPO_API_URL || DEFAULT_LOCAL;
+// Resolve API base simply: allow global override, otherwise detect runtime and pick local for local dev or deployed otherwise.
+const explicit = (globalThis as any)?.EXPO_API_URL;
+const isBrowserLocal = typeof globalThis !== 'undefined' && (globalThis as any).location && ['localhost', '127.0.0.1'].includes((globalThis as any).location.hostname) || ((globalThis as any).location && (globalThis as any).location.hostname?.startsWith('192.168.'));
+const API_BASE = explicit || (isBrowserLocal ? DEFAULT_LOCAL : DEFAULT_DEPLOYED);
 const API = `${API_BASE}`;
 // log the computed API for debugging in the browser console
 if (typeof console !== 'undefined') console.log('Lola Demo API base:', API_BASE);
