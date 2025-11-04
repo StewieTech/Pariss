@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { SafeAreaView, View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity, ScrollView, Share, Platform } from 'react-native';
 import { speakText } from './app/services/voice';
+import PvPScreen from './app/screens/PvP';
 // Normalize axios import shape for various bundlers/runtime environments.
 // Some bundlers export axios as the default, others as a namespace with a `default` property.
 // Import defensively and normalize to `Axios` so later code can call Axios.post/get safely.
@@ -57,7 +58,7 @@ export default function App() {
       <NavBar current={screen} onNav={setScreen} />
       {screen === 'main' && <MainMenu onChoose={setScreen} />}
       {screen === 'pve' && <PvE />}
-      {screen === 'pvp' && <PvP />}
+      {screen === 'pvp' && <PvPScreen />}
       </SafeAreaView>
   ) 
 }

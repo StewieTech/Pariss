@@ -81,6 +81,7 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       return {
         statusCode: 204,
         headers: {
+          'x-cors-debug': 'preflight-response',
           ...corsHeaders(event),
         },
         body: "" // IMPORTANT: empty body for 204

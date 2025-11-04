@@ -1,8 +1,5 @@
-import axios from 'axios';
-import { API } from './config';
+import client from './client';
 import type { ChatMessage, PvpRoom } from '../types/chat';
-
-const client = axios.create({ baseURL: API, timeout: 25000 });
 
 export async function sendChatMessage(message: string, history: ChatMessage[] = []) {
   const res = await client.post('/chat/send', { message, history });
