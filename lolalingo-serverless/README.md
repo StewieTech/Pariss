@@ -21,6 +21,11 @@ aws configure --profile asklolaai
 $env:AWS_PROFILE = 'asklolaai'
 $region = 'ca-central-1'
 $func='lola-api'
+$alias='prod'
+$funcUrl = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/chat/translate'
+$origin = 'http://lola-frontend.s3-website.ca-central-1.amazonaws.com'
+$alias = 'prod'   # or 'prod' or the alias name your function URL uses
+aws lambda update-alias --function-name $func --name $alias --function-version $ver --region $region
 
 $bucket = 'lolalingo-staging-serverlessdeploymentbucket-dbxctmcuvqve'
 # create bucket
@@ -58,11 +63,15 @@ $ver = aws lambda publish-version --function-name lola-api --region $region --qu
 $ver = aws lambda publish-version --function-name lola-prod --region $region --query 'Version' --output text
 
 ## here is where I would change the name to staging | prod | preprod -> this creates or updates alias
-aws lambda create-alias --function-name lola-api --name lola-prod --function-version $ver --region $region 2>$null || aws lambda update-alias --function-name lola-prod --name staging --function-version $ver --region $region
+aws lambda create-alias --function-name lola-api --name lola-prod --function-version $ver --region $region 2>$null ||
+aws lambda update-alias --function-name lola-prod --name staging --function-version $ver --region $region
 
 aws lambda get-function-url-config --function-name lola-api --qualifier staging --profile asklolaai --region ca-central-1
 
 aws lambda create-function-url-config --function-name lola-prod --qualifier lola-prod --auth-type NONE --cors 'AllowOrigins=["*"],AllowMethods=["GET","POST","OPTIONS"],AllowHeaders=["*"]' --region $region --query 'FunctionUrl' --output text
+
+## CORS
+aws lambda update-function-url-config --function-name lola-api --cors AllowOrigins="['http://lola-frontend.s3-website.ca-central-1.amazonaws.com']" --region ca-central-1
 
 # Point STAGING alias at the new version and create its Function URL
 $env:ENV_ALIAS='staging'; bash ./scripts/promote_alias.sh
@@ -90,3 +99,61 @@ $body = @{ text = 'How are you?' } | ConvertTo-Json
 Invoke-RestMethod -Uri 'http://192.168.2.44:4000/chat/translate' -Method POST -Body $body -ContentType 'application/json'
 
 Invoke-RestMethod -Uri 'hhttps://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/chat/translate' -Method POST -Body $body -ContentType 'application/json'
+
+
+http://192.168.2.44:4000
+
+# call endpoint, get base64 text, write to file
+$b64 = Invoke-RestMethod -Method Post -Uri http://192.168.2.44:4000/chat/tts -Body (@{ text = 'Bonjour'; voiceId = 'LEnmbrrxYsUYS7vsRRwD' } | ConvertTo-Json) -ContentType 'application/json'
+[System.IO.File]::WriteAllBytes('bonjour.mp3',[Convert]::FromBase64String($b64))
+
+
+# create/overwrite the secure SSM parameter for the 'staging' alias
+aws ssm put-parameter --name "/lola/staging/ELEVEN_API_KEY" --value "sk-REPLACE_WITH_YOUR_KEY" --type SecureString --overwrite --region ca-central-1 --profile asklolaai
+
+# optional: set default voice id too (plain string)
+aws ssm put-parameter --name "/lola/staging/ELEVEN_VOICE_ID" --value "LEnmbrrxYsUYS7vsRRwD" --type String --overwrite --region ca-central-1 --profile asklolaai
+
+# verify it's present (with decryption)
+aws ssm get-parameter --name "/lola/staging/ELEVEN_API_KEY" --with-decryption --region ca-central-1 --profile asklolaai
+
+
+# Update the Function URL to require AWS_IAM and set CORS for your origin
+aws lambda update-function-url-config `
+  --function-name $func `
+  --auth-type AWS_IAM `
+  --cors "AllowOrigins=['$origin'],AllowMethods=['GET','POST','OPTIONS'],AllowHeaders=['*']" `
+  --region $region
+
+
+  $func   = 'lola-api'
+$region = 'ca-central-1'
+$origin = 'http://lola-frontend.s3-website.ca-central-1.amazonaws.com'
+
+# Build CORS JSON safely
+$cors = '{ "AllowOrigins": ["' + $origin + '"], "AllowMethods": ["GET","POST","OPTIONS"], "AllowHeaders": ["*"] }'
+
+# Update function-url to auth NONE and set CORS
+aws lambda update-function-url-config --function-name $func --auth-type NONE --cors $cors --region $region
+
+$funcUrl = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/chat/translate'
+$funcUrl = 'https://37aouuy2ay3uwseeipasynah640sxqcp.lambda-url.ca-central-1.on.aws/'
+
+$origin = 'http://lola-frontend.s3-website.ca-central-1.amazonaws.com'
+
+curl.exe -i -X OPTIONS $funcUrl -H "Origin: $origin" -H "Access-Control-Request-Method: POST"
+
+## publishes latest code as an immutable version
+$ver = aws lambda publish-version --function-name $func --region $region --query 'Version' --output text
+Write-Host "Published version: $ver"
+
+## Update the prod alias to point to the newly published version
+aws lambda update-alias --function-name $func --name $alias --function-version $ver --region $region
+Write-Host "Alias '$alias' updated to version $ver"
+
+aws lambda get-function-url-config --function-name $func --qualifier $alias --region $region | ConvertFrom-Json | Select-Object FunctionUrl, AuthType, Cors, Qualifier
+
+$cors = '{ "AllowOrigins": ["' + $origin + '"], "AllowMethods": ["GET","POST","OPTIONS"], "AllowHeaders": ["*"] }'
+
+# Update (targeting the URL bound to the alias)
+aws lambda update-function-url-config --function-name $func --qualifier $alias --cors $cors --region $region

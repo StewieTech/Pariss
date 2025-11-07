@@ -7,6 +7,7 @@ import { connectDb } from './config/db';
 import chatRouter from './routes/chat.routes';
 import miscRouter from './routes/misc.routes';
 import pvpRouter from './routes/pvp.routes';
+import voiceRouter from './routes/voice.routes';
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 const app = express();
@@ -17,8 +18,11 @@ app.use(express.json());
 app.get('/_health', (req, res) => res.json({ status: 'ok' }));
 // app.use('/api/v1/chat', chatRouter);
 app.use('/chat', chatRouter);
+// voiceRouter provides POST /chat/tts which proxies ElevenLabs TTS via the server-side service
+app.use('/chat', voiceRouter);
 app.use('/pvp', pvpRouter);
 app.use('/api/v1', miscRouter);
+
 
 const PORT = process.env.PORT || 4000;
 
@@ -27,6 +31,13 @@ connectDb()
     app.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
   })
   .catch((err) => {
-    logger.error('Failed to start', err);
+    // include error details and stack for easier local debugging
+    try {
+      logger.error({ err: err && (err.stack || err.message || err) }, 'Failed to start');
+    } catch (logErr) {
+      // fallback simple log
+      // eslint-disable-next-line no-console
+      console.error('Failed to start', err);
+    }
     process.exit(1);
   });

@@ -19,8 +19,8 @@ aws sts get-caller-identity --profile asklolaai
 
 $env:AWS_PROFILE='asklolaai'
 $region='ca-central-1'
-$bucket='lola-prod'
 $bucket='lola-frontend'
+$bucket='lola-prod'
 
 aws s3api create-bucket --bucket $bucket --region $region --create-bucket-configuration LocationConstraint=$region
 aws s3api put-public-access-block --bucket $bucket --public-access-block-configuration 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=False,RestrictPublicBuckets=true' --region $region
