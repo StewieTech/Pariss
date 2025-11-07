@@ -13,6 +13,7 @@ type Req = {
 };
 
 const ssm = new SSMClient({});
+
 // small helper to make short traceable ids for logs
 function shortId(prefix = '') {
   return prefix + Math.random().toString(36).slice(2, 9);
@@ -40,35 +41,17 @@ async function getParam(name: string, withDecryption = true) {
   }
 }
 
-/** ===== CORS helpers (updated) ===== */
-function corsHeaders(event: Req) {
-  // You don't use credentials. Keep wildcard; echo origin if present (useful with multiple frontends).
-  const origin = event.headers?.origin || '*';
-  // Echo requested method/headers for robust preflight handling.
-  const reqMethod = event.headers?.['access-control-request-method'] || 'GET,POST,OPTIONS';
-  const reqHeaders = event.headers?.['access-control-request-headers'] || 'Content-Type,Authorization';
-
-  return {
-    'access-control-allow-origin': origin,
-    'access-control-allow-methods': reqMethod,   // could also be 'GET,POST,OPTIONS'
-    'access-control-allow-headers': reqHeaders,  // or explicit list if you prefer
-    'access-control-max-age': '86400',
-    'vary': 'Origin, Access-Control-Request-Method, Access-Control-Request-Headers'
-    // NOTE: No 'access-control-allow-credentials' since you don't use credentials/cookies.
-  };
-}
-
-function json(event: Req, statusCode: number, data: unknown): APIGatewayProxyResult {
+/** ===== JSON response helper (no custom CORS; Function URL adds CORS) ===== */
+function json(_event: Req, statusCode: number, data: unknown): APIGatewayProxyResult {
   return {
     statusCode,
     headers: {
       "content-type": "application/json",
-      ...corsHeaders(event),
     },
     body: JSON.stringify(data)
   };
 }
-/** ================================== */
+/** ======================================================================= */
 
 // Single Lambda "http" entry compatible with Function URLs
 export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyResult> {
@@ -76,15 +59,13 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
     const method = event?.requestContext?.http?.method || "GET";
     const path = event?.rawPath || event?.requestContext?.http?.path || "/";
 
-    // Always respond to preflight early with CORS headers
+    // NOTE: With Function URL CORS enabled, AWS answers preflight before code runs.
+    // Keeping this branch is harmless; it won't be called for preflight.
     if (method === "OPTIONS") {
       return {
         statusCode: 204,
-        headers: {
-          'x-cors-debug': 'preflight-response',
-          ...corsHeaders(event),
-        },
-        body: "" // IMPORTANT: empty body for 204
+        headers: {},   // no CORS here to avoid duplicates if this ever runs
+        body: ""
       };
     }
 
@@ -237,13 +218,12 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
         // call service
         const out = await synthesize(text, voiceId || '');
         const bodyBase64 = out.buffer.toString('base64');
-        // return binary response with proper headers
+        // return binary response with proper headers (no custom CORS here)
         return {
           statusCode: 200,
           isBase64Encoded: true,
           headers: {
             'content-type': out.contentType,
-            ...corsHeaders(event),
           },
           body: bodyBase64
         };
@@ -257,27 +237,22 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
     // pvp routes: create, join, message, get state, suggest
     if (path.startsWith('/pvp')) {
       try {
-        // route to specific handlers
         if (path === '/pvp/create' && method === 'POST') {
           const out = await callController(createRoom, event);
           return json(event, 200, out ?? {});
         }
-        // /pvp/:id/join
         if (/^\/pvp\/[^\/]+\/join$/.test(path) && method === 'POST') {
           const out = await callController(joinRoom, event);
           return json(event, 200, out ?? {});
         }
-        // /pvp/:id/message
         if (/^\/pvp\/[^\/]+\/message$/.test(path) && method === 'POST') {
           const out = await callController(postMessage, event);
           return json(event, 200, out ?? {});
         }
-        // GET /pvp/:id
         if (/^\/pvp\/[^\/]+$/.test(path) && method === 'GET') {
           const out = await callController(getRoomState, event);
           return json(event, 200, out ?? {});
         }
-        // /pvp/:id/suggest
         if (/^\/pvp\/[^\/]+\/suggest$/.test(path) && method === 'POST') {
           const out = await callController(suggestReplies, event);
           if (out && out.__status) return json(event, out.__status, out.body);
@@ -290,10 +265,8 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
 
     return json(event, 404, { error: "Not Found", path, method });
   } catch (err: any) {
-    // Top-level catch to ensure we always return JSON with CORS headers instead of causing a 502 with no headers.
     const errorId = shortId('e_top_');
     log('error', 'Unhandled handler error', { errorId, err: String(err) });
-    // NOTE: No event object here would drop CORS; but in Lambda URLs we always get event.
     return json(event, 500, { error: 'internal server error', details: String(err?.message || err), errorId });
   }
 }
