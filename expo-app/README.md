@@ -36,18 +36,28 @@ npm ci
 <!-- npm run export:web:prod -->
 
 # or to export without embedding a production API URL:
-npm run export:web
+npm run export:web DONT USE THIS!!!
+npx expo export --platform web
+
+# USE THIS ONE !!
+npx expo export -p web --output-dir web-build
+
+
 
 # sync to S3
 aws s3 sync .\web-build\ s3://lola-frontend --delete --region $region
 aws s3 sync .\web-build\ s3://lola-prod --delete --region $region
+aws s3 sync .\web-build\ s3://lola-pre --delete --region $region
 
 
 # Setup Steps
 
+http://lola-pre.s3-website.ca-central-1.amazonaws.com
+
 ## enable static website hosting (optional; S3 website has HTTP only)
 aws s3 website s3://lola-frontend --index-document index.html --error-document index.html
 aws s3 website s3://lola-prod --index-document index.html --error-document index.html
+aws s3 website s3://lola-pre --index-document index.html --error-document index.html
 
 ## S3 website URL:
 Write-Output "http://$bucket.s3-website-$region.amazonaws.com"

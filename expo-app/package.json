@@ -25,11 +25,13 @@
   },
   "scripts": {
     "start": "npx expo start",
-    "dev": "npx expo start --dev-client",
+    "dev": "npx expo start -c --dev-client",
     "test": "jest --passWithNoTests",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+  "eas:web": "npx eas build --platform web",
+  "build:web": "expo export -p web --output-dir web-build",
     "smoke": "node ./scripts/smoketest.js",
     "export:web": "expo export:web",
     "export:web:prod": "cross-env EXPO_API_URL=https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws expo export:web"
