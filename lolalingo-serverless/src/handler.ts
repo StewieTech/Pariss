@@ -221,11 +221,11 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
         // return binary response with proper headers (no custom CORS here)
         return {
           statusCode: 200,
-          isBase64Encoded: true,
           headers: {
             'content-type': out.contentType,
           },
-          body: bodyBase64
+          body: bodyBase64,
+          isBase64Encoded: false
         };
       } catch (err: any) {
         const errorId = shortId('e_tts_');

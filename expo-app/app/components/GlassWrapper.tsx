@@ -1,5 +1,4 @@
 // app/components/GlassWrapper.tsx
-import React from 'react';
 import { View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -13,7 +12,7 @@ export default function GlassWrapper({ children, className }: React.PropsWithChi
       className="flex-1"
     >
       <View className={`flex-1 p-4 ${className || ''}`}>
-        <BlurView intensity={30} tint="dark" className="rounded-3xl overflow-hidden flex-1">
+        <BlurView intensity={30} tint="dark" style={{ flex: 1, borderRadius: 24, overflow: 'hidden' }}>
           {children}
         </BlurView>
       </View>

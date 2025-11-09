@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, TextInput, TouchableOpacity, Text } from 'react-native';
 
 export default function MessageInput({ value, onChange, onSend, placeholder }:{value:string,onChange:(s:string)=>void,onSend:()=>void,placeholder?:string}){
