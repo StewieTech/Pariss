@@ -1,33 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import  { useEffect, useState } from 'react';
 import { SafeAreaView, View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity, ScrollView, Share, Platform } from 'react-native';
 import { speakText } from './app/services/voice';
 import PvPScreen from './app/screens/PvP';
-// Normalize axios import shape for various bundlers/runtime environments.
-// Some bundlers export axios as the default, others as a namespace with a `default` property.
-// Import defensively and normalize to `Axios` so later code can call Axios.post/get safely.
-// Use a small fetch-based client instead of relying on axios to avoid bundler/module-shape issues.
-// This keeps network calls simple and reliable across environments (web / expo / metro).
-const client = {
-  post: async (url: string, body?: any) => {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: body != null ? JSON.stringify(body) : undefined,
-    });
-    const text = await resp.text().catch(() => null);
-    let data: any = null;
-    try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
-    return { data, status: resp.status, ok: resp.ok, text };
-  },
-  get: async (url: string) => {
-    const resp = await fetch(url, { method: 'GET' });
-    const text = await resp.text().catch(() => null);
-    let data: any = null;
-    try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
-    return { data, status: resp.status, ok: resp.ok, text };
-  }
-};
-console.log('using fetch-based client for network requests');
+import client from './app/lib/client';
+import './global.css';
+// then your normal imports
+
 
 import { sanitizeVariant, parseRoomIdFromRaw } from './app/lib/utils';
 import NavBar from './app/components/NavBar';

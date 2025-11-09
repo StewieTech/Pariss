@@ -48,4 +48,27 @@ const client = {
   }
 };
 
+
+// const client = {
+//   post: async (url: string, body?: any) => {
+//     const resp = await fetch(url, {
+//       method: 'POST',
+//       headers: { 'Content-Type': 'application/json' },
+//       body: body != null ? JSON.stringify(body) : undefined,
+//     });
+//     const text = await resp.text().catch(() => null);
+//     let data: any = null;
+//     try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+//     return { data, status: resp.status, ok: resp.ok, text };
+//   },
+//   get: async (url: string) => {
+//     const resp = await fetch(url, { method: 'GET' });
+//     const text = await resp.text().catch(() => null);
+//     let data: any = null;
+//     try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+//     return { data, status: resp.status, ok: resp.ok, text };
+//   }
+// };
+// console.log('using fetch-based client for network requests');
+
 export default client;

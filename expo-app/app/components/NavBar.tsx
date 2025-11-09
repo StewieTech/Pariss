@@ -1,27 +1,33 @@
-import React from 'react';
+// app/components/NavBar.tsx
 import { View, Text, TouchableOpacity } from 'react-native';
-import styles from '../styles';
+import { BlurView } from 'expo-blur';
+const BV: any = BlurView;
 
 export default function NavBar({ current, onNav }: { current: string; onNav: (s: any) => void }) {
+  const tab = (key: string, label: string) => {
+    const active = current === key;
+    return (
+      <TouchableOpacity
+        key={key}
+        testID={`nav-${key}`}
+        onPress={() => onNav(key)}
+        className={`flex-1 mx-1 py-3 rounded-2xl items-center justify-center ${
+          active ? 'bg-white text-brand-600' : 'bg-white/10'
+        }`}
+      >
+        <Text className={`text-lg font-bold ${active ? 'text-brand-600' : 'text-white'}`}>{label}</Text>
+      </TouchableOpacity>
+    );
+  };
+
   return (
-    <View style={styles.navbar}>
-  <TouchableOpacity testID="nav-main" onPress={() => onNav('main')}><Text testID="nav-main" style={styles.navText}>Main</Text></TouchableOpacity>
-  <TouchableOpacity testID="nav-pve" onPress={() => onNav('pve')}><Text testID="nav-pve" style={[styles.navText, current==='pve' && styles.navTextActive]}>Talk to Lola</Text></TouchableOpacity>
-  <TouchableOpacity testID="nav-pvp" onPress={() => onNav('pvp')}><Text testID="nav-pvp" style={[styles.navText, current==='pvp' && styles.navTextActive]}>Talk to Friends</Text></TouchableOpacity>
-    </View>
+    // big bubbly purple nav with three evenly spaced options
+    <BV intensity={30} tint="dark" className="mx-3 mt-3 rounded-2xl overflow-hidden bg-brand-600">
+<View className="flex-row items-center justify-around px-3 py-3">
+        {tab('main', 'Main')}
+        {tab('pve', 'Talk to Lola')}
+        {tab('pvp', 'Talk to Friends')}
+      </View>
+    </BV>
   );
 }
-
-// export default function NavBar({ active, onChange }:{active:string, onChange:(s:string)=>void}){
-//   return (
-//     <View style={styles.container}>
-//       {['Home','PvE','PvP'].map(k=> (
-//         <TouchableOpacity key={k} onPress={()=>onChange(k)} style={[styles.tab, active===k && styles.active]}>
-//           <Text style={[styles.label, active===k && styles.labelActive]}>{k}</Text>
-//         </TouchableOpacity>
-//       ))}
-//     </View>
-//   );
-// }
-
-
