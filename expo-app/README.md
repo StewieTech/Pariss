@@ -41,6 +41,7 @@ npm run export:web
 # sync to S3
 aws s3 sync .\web-build\ s3://lola-frontend --delete --region $region
 aws s3 sync .\web-build\ s3://lola-prod --delete --region $region
+aws s3 sync .\web-build\ s3://lola-pre --delete --region $region
 
 
 # Setup Steps
