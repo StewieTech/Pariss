@@ -16,6 +16,8 @@ export default function PvEScreen() {
   const sendRef = useRef<{ send?: () => void } | null>(null);
   const [translateOptions, setTranslateOptions] = useState<string[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
+  // track which assistant message index is currently speaking/loading
+  const [speakingIdx, setSpeakingIdx] = useState<number | null>(null);
 
   // web-specific keyboard handler props (onKeyDown isn't part of RN TextInputProps types)
   const webKeyDownProps: any = Platform.OS === 'web' ? {
@@ -74,9 +76,26 @@ export default function PvEScreen() {
           <View style={[styles.bubble, item?.role === 'user' ? styles.userBubble : styles.assistantBubble]}>
             <Text>{item?.content}</Text>
             {item?.role === 'assistant' && mode === 'm3' && (
-              <TouchableOpacity testID={`speak-${index}`} onPress={() => speakText(item?.content)} style={{ marginTop: 6 }}>
-                <Text accessibilityLabel={`speak-${index}`} style={{ color: '#6D28D9', fontSize: 13 }}>
-                   🔊 Click to hear Lola :)
+              <TouchableOpacity
+                testID={`speak-${index}`}
+                style={{ marginTop: 6 }}
+                onPress={async () => {
+                  if (!item?.content) return;
+                  try {
+                    setSpeakingIdx(index);
+                    await speakText(item.content);
+                  } catch (e) {
+                    console.warn('speak failed', e);
+                  } finally {
+                    setSpeakingIdx((cur) => (cur === index ? null : cur));
+                  }
+                }}
+              >
+                <Text
+                  accessibilityLabel={`speak-${index}`}
+                  style={{ color: '#6D28D9', fontSize: 13 }}
+                >
+                  {speakingIdx === index ? '⏳ Loading voice…' : '🔊 Click to hear Lola :)'}
                 </Text>
               </TouchableOpacity>
             )}
