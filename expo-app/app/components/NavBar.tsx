@@ -26,7 +26,7 @@ export default function NavBar({ current, onNav }: { current: string; onNav: (s:
 <View className="flex-row items-center justify-around px-3 py-3">
         {tab('main', 'Main')}
         {tab('pve', 'Talk to Lola')}
-        {tab('pvp', 'Talk to Friends')}
+        {tab('pvp', 'Talk to Friends TBD')}
       </View>
     </BV>
   );

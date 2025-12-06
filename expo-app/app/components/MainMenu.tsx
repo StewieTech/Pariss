@@ -18,7 +18,7 @@ export default function MainMenu({ onChoose }: { onChoose: (s: any) => void }) {
               onPress={() => onChoose('pvp')}
               className="rounded-2xl px-6 py-4 bg-white/10 border border-white/15"
             >
-              <Text className="text-white font-semibold text-center">Talk to Friends</Text>
+              <Text className="text-white font-semibold text-center">Talk to Friends TBD</Text>
             </TouchableOpacity>
           </View>
         </View>

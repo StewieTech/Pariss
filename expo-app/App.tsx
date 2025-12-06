@@ -2,6 +2,7 @@ import  { useEffect, useState, useRef } from 'react';
 import { SafeAreaView, View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity, ScrollView, Share, Platform } from 'react-native';
 import { speakText } from './app/services/voice';
 import PvPScreen from './app/screens/PvP';
+import PvEScreen from './app/screens/PvE';
 import client from './app/lib/client';
 import './global.css';
 import SendButton from './app/components/SendButton';
@@ -37,7 +38,7 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <NavBar current={screen} onNav={setScreen} />
       {screen === 'main' && <MainMenu onChoose={setScreen} />}
-      {screen === 'pve' && <PvE />}
+      {screen === 'pve' && <PvEScreen />}
       {screen === 'pvp' && <PvPScreen />}
       </SafeAreaView>
   ) 
@@ -136,7 +137,9 @@ function PvE() {
             <Text>{item?.content}</Text>
             {item?.role === 'assistant' && mode === 'm3' && (
               <TouchableOpacity testID={`speak-${index}`} onPress={() => speakText(item?.content)} style={{ marginTop: 6 }}>
-                <Text accessibilityLabel={`speak-${index}`}>🔊</Text>
+                <Text accessibilityLabel={`speak-${index}`} style={{ color: '#6D28D9', fontSize: 13 }}>
+                   🔊 Click to hear Lola :)
+                </Text>
               </TouchableOpacity>
             )}
           </View>
