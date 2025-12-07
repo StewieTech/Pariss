@@ -8,11 +8,14 @@ type Props = {
   setText: (t: string) => void;
   messages: any[];
   setMessages: (m: any[] | ((prev: any[]) => any[])) => void;
-  mode: 'm1' | 'm2' | 'm3';
+  // Optional override send handler; when provided, uses this instead of default chat/send
+  onSend?: (text: string) => Promise<void> | void;
+  // Optional mode for backend chat
+  mode?: 'm1' | 'm2' | 'm3';
   disabled?: boolean;
 };
 
-const SendButton = forwardRef(function SendButton({ text, setText, messages, setMessages, mode, disabled }: Props, ref) {
+const SendButton = forwardRef(function SendButton({ text, setText, messages, setMessages, onSend, mode, disabled }: Props, ref) {
   const [isSending, setIsSending] = useState(false);
   const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // immediate sending lock to prevent duplicate sends within the same event loop
@@ -29,9 +32,13 @@ const SendButton = forwardRef(function SendButton({ text, setText, messages, set
       setMessages((prev: any[]) => [...prev, userMsg]);
       setText('');
 
-      const res = await client.post(`${API}/chat/send`, { text: userMsg.content, mode });
-      const reply = res?.data?.reply ?? '';
-      setMessages((prev: any[]) => [...prev, { role: 'assistant', content: reply }]);
+      if (onSend) {
+        await Promise.resolve(onSend(userMsg.content));
+      } else {
+        const res = await client.post(`${API}/chat/send`, { text: userMsg.content, mode });
+        const reply = res?.data?.reply ?? '';
+        setMessages((prev: any[]) => [...prev, { role: 'assistant', content: reply }]);
+      }
     } catch (err: any) {
       console.error('API call failed', err);
       let message = 'Error calling API';

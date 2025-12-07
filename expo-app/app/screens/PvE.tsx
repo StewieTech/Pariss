@@ -7,6 +7,8 @@ import { sanitizeVariant } from "../lib/utils";
 import { View, Text, TextInput, Button, FlatList, TouchableOpacity, Platform } from 'react-native';
 // import { speakText } from '../../app/services/voice';
 import { LolaVoiceButton } from "../components/LolaVoiceButton";
+import { translateButton } from "../components/TranslateButton";
+
 
 
 
@@ -39,15 +41,15 @@ export default function PvEScreen() {
   } : {};
 
 
-  async function translateFirst() {
-    if (!text) return;
-    setIsTranslating(true); setTranslateOptions([]);
-    try {
-      const res = await client.post(`${API}/chat/translate`, { text });
-      const variants: string[] = res?.data?.variants ?? [];
-      if (Array.isArray(variants) && variants.length > 0) setTranslateOptions(variants.slice(0,3)); else setTranslateOptions([String(res?.data?.variants || '(no variants)')]);
-    } catch (e) { console.error('TranslateFirst failed', e); setTranslateOptions([`(translation failed) ${String(e)}`]); } finally { setIsTranslating(false); }
-  }
+//   async function translateFirst() {
+//     if (!text) return;
+//     setIsTranslating(true); setTranslateOptions([]);
+//     try {
+//       const res = await client.post(`${API}/chat/translate`, { text });
+//       const variants: string[] = res?.data?.variants ?? [];
+//       if (Array.isArray(variants) && variants.length > 0) setTranslateOptions(variants.slice(0,3)); else setTranslateOptions([String(res?.data?.variants || '(no variants)')]);
+//     } catch (e) { console.error('TranslateFirst failed', e); setTranslateOptions([`(translation failed) ${String(e)}`]); } finally { setIsTranslating(false); }
+//   }
 
   return (
     <View style={{ flex: 1, padding: 12 }}>
@@ -109,7 +111,7 @@ export default function PvEScreen() {
         />
         <View style={{ flexDirection: 'row' }}>
           <View style={{ marginRight: 6 }}>
-            <Button title={isTranslating ? 'Translating...' : 'Translate First'} onPress={translateFirst} disabled={isTranslating} />
+            <Button title={isTranslating ? 'Translating...' : 'Translate First'} onPress={translateButton} disabled={isTranslating} />
           </View>
           <SendButton ref={sendRef} text={text} setText={setText} messages={messages} setMessages={setMessages} mode={mode} />
         </View>
