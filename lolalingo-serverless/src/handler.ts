@@ -7,10 +7,13 @@ import { synthesize } from '../../src/services/voice.service';
 
 type Req = {
   rawPath?: string;
+  rawQueryString?: string; 
+  queryStringParameters?: Record<string,string>;
   requestContext?: { http?: { method?: string; path?: string } };
   body?: string;
   headers?: Record<string, string>;
 };
+
 
 const ssm = new SSMClient({});
 
@@ -80,6 +83,24 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
     } catch (e) {
       // ignore; controllers will handle missing key
     }
+
+    // Ensure MongoDB env vars are available (once per cold start)
+    try {
+      const envAlias = process.env.ENV_ALIAS || "staging";
+
+      if (!process.env.MONGODB_URI) {
+        const uri = await getParam(`/lola/${envAlias}/MONGODB_URI`, true);
+        if (uri) process.env.MONGODB_URI = uri;
+      }
+
+      if (!process.env.MONGODB_DB) {
+        const db = await getParam(`/lola/${envAlias}/MONGODB_DB`, false);
+        if (db) process.env.MONGODB_DB = db;
+      }
+    } catch {
+      // let controllers fail loudly if missing
+    }
+
 
     if (path === "/health") {
       return json(event, 200, { ok: true, env: process.env.ENV_ALIAS || "unknown" });

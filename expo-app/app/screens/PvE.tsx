@@ -7,38 +7,35 @@ import { sanitizeVariant } from "../lib/utils";
 import { View, Text, TextInput, Button, FlatList, TouchableOpacity, Platform } from 'react-native';
 // import { speakText } from '../../app/services/voice';
 import { LolaVoiceButton } from "../components/LolaVoiceButton";
-import { translateButton } from "../components/TranslateButton";
-
-
-
+import { translateFirst } from "../components/TranslateButton";
+import { LolaChatInput } from "../components/LolaChatInput";
 
 export default function PvEScreen() {
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
-  const [mode, setMode] = useState<'m1'|'m2'|'m3'>('m1');
   const sendRef = useRef<{ send?: () => void } | null>(null);
+  const [mode, setMode] = useState<'m1'|'m2'|'m3'>('m1');
   const [translateOptions, setTranslateOptions] = useState<string[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
 
-  // web-specific keyboard handler props (onKeyDown isn't part of RN TextInputProps types)
-  const webKeyDownProps: any = Platform.OS === 'web' ? {
-    onKeyDown: (e: any) => {
-      const key = e?.key ?? e?.nativeEvent?.key;
-      const shift = e?.shiftKey ?? e?.nativeEvent?.shiftKey;
-      const alt = e?.altKey ?? e?.nativeEvent?.altKey;
-      const ctrl = e?.ctrlKey ?? e?.nativeEvent?.ctrlKey;
-      const meta = e?.metaKey ?? e?.nativeEvent?.metaKey;
-      if (key === 'Enter') {
-        // only treat Enter as send when no modifier keys are pressed
-        if (shift || alt || ctrl || meta) {
-          // allow newline when any modifier is used
-          return;
-        }
-        if (e.preventDefault) e.preventDefault();
-        sendRef.current?.send && sendRef.current.send();
-      }
-    }
-  } : {};
+//   const webKeyDownProps: any = Platform.OS === 'web' ? {
+//     onKeyDown: (e: any) => {
+//       const key = e?.key ?? e?.nativeEvent?.key;
+//       const shift = e?.shiftKey ?? e?.nativeEvent?.shiftKey;
+//       const alt = e?.altKey ?? e?.nativeEvent?.altKey;
+//       const ctrl = e?.ctrlKey ?? e?.nativeEvent?.ctrlKey;
+//       const meta = e?.metaKey ?? e?.nativeEvent?.metaKey;
+//       if (key === 'Enter') {
+//         // only treat Enter as send when no modifier keys are pressed
+//         if (shift || alt || ctrl || meta) {
+//           // allow newline when any modifier is used
+//           return;
+//         }
+//         if (e.preventDefault) e.preventDefault();
+//         sendRef.current?.send && sendRef.current.send();
+//       }
+//     }
+//   } : {};
 
 
 //   async function translateFirst() {
@@ -85,33 +82,39 @@ export default function PvEScreen() {
         )}
       />
       <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          value={text}
-          onChangeText={setText}
-          placeholder="Type..."
-          multiline={true}
-          blurOnSubmit={true}
-          returnKeyType="send"
-          onSubmitEditing={() => sendRef.current?.send && sendRef.current.send()}
-          {...webKeyDownProps}
-          onKeyPress={(e: any) => {
-            // fallback for platforms that expose nativeEvent.key
-            try {
-              const key = e?.nativeEvent?.key;
-              const shift = e?.nativeEvent?.shiftKey;
-              const alt = e?.nativeEvent?.altKey;
-              const ctrl = e?.nativeEvent?.ctrlKey;
-              const meta = e?.nativeEvent?.metaKey;
-              if (key === 'Enter' && !shift && !alt && !ctrl && !meta) {
-                sendRef.current?.send && sendRef.current.send();
-              }
-            } catch (err) { /* ignore */ }
-          }}
-        />
+  <LolaChatInput
+    value={text}
+    onChangeText={setText}
+    onSend={() => {
+      if (sendRef.current?.send) {
+        sendRef.current.send();
+      }
+    }}
+    placeholder="Type..."
+    inputStyle={styles.input}
+  />
         <View style={{ flexDirection: 'row' }}>
           <View style={{ marginRight: 6 }}>
-            <Button title={isTranslating ? 'Translating...' : 'Translate First'} onPress={translateButton} disabled={isTranslating} />
+            <Button
+              title={isTranslating ? 'Translating...' : 'Translate First'}
+              onPress={async () => {
+                if (!text) return;
+                setIsTranslating(true);
+                setTranslateOptions([]);
+                try {
+                  const variants = await translateFirst(text);
+                  setTranslateOptions(
+                    variants.length > 0 ? variants.slice(0, 3) : [ '(no variants)' ]
+                  );
+                } catch (e) {
+                  console.error('TranslateFirst failed', e);
+                  setTranslateOptions([`(translation failed) ${String(e)}`]);
+                } finally {
+                  setIsTranslating(false);
+                }
+              }}
+              disabled={isTranslating}
+            />
           </View>
           <SendButton ref={sendRef} text={text} setText={setText} messages={messages} setMessages={setMessages} mode={mode} />
         </View>

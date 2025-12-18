@@ -9,11 +9,13 @@ export type PvpMessage = {
   id?: string;
   author: string;
   text: string;
-  ts?: number;
+  ts: number;    
 }
 
 export type PvpRoom = {
   id: string;
+  participants?: string[];
   messages: PvpMessage[];
   createdAt: number;
+  updatedAt?: number;
 }

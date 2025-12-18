@@ -15,7 +15,7 @@ import { usePvpRoom } from '../hooks/usePvpRoom';
 import * as api from '../lib/api';
 import { sanitizeVariant } from '../lib/sanitize';
 import { API } from '../lib/config';
-import { translateButton } from '../components/TranslateButton';
+import { translateFirst } from '../components/TranslateButton';
 
 // Simple Tailwind-styled button
 type ButtonProps = {
@@ -65,6 +65,7 @@ export default function PvPScreen() {
   const {
     participants,
     messages,
+    setMessages,
     create,
     join,
     postMessage,
@@ -384,67 +385,7 @@ export default function PvPScreen() {
             </View>
           </View>
 
-          {/* Chat area */}
-          <View className="flex-1">
-            <Text className="text-sm text-gray-700 mb-2">
-              Participants:{' '}
-              <Text className="font-semibold">
-                {participants.length ? participants.join(', ') : 'None yet'}
-              </Text>
-            </Text>
-
-            <FlatList
-              data={messages}
-              keyExtractor={(m, i) => String(i)}
-              className="flex-1 mb-3"
-              renderItem={({ item }) => (
-                <ChatBubble author={item.name} text={item.text} />
-              )}
-            />
-
-            {/* MessageInput removed in favor of RoomChat with SendButton */}
-
-            <View className="flex-row mt-3">
-              <TwButton
-                title="Translate First"
-                onPress={handleTranslateFirst}
-              />
-              <View className="w-3" />
-              <TwButton title="Ask Lola" onPress={handleAskLola} />
-              <View className="w-3" />
-              <TwButton
-                title="Leave"
-                onPress={() => {
-                  stopPolling();
-                  setCreatedRoom(null);
-                  setShareLink(null);
-                  setInput('');
-                }}
-                className="bg-rose-500"
-              />
-            </View>
-
-            {translateOptionsRoom.length > 0 && (
-              <View className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
-                <Text className="font-semibold mb-2 text-amber-900">
-                  Choose a translation
-                </Text>
-                {translateOptionsRoom.map((opt) => (
-                  <TouchableOpacity
-                    key={opt}
-                    onPress={() => {
-                      setInput(sanitizeVariant(opt));
-                      setTranslateOptionsRoom([]);
-                    }}
-                    className="mb-2 px-3 py-2 rounded-md bg-white border border-gray-200"
-                  >
-                    <Text className="text-gray-800">{opt}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
           </View>
-        </View>
       )}
 
       {/* CREATE ROOM TAB */}
@@ -508,22 +449,25 @@ export default function PvPScreen() {
       )}
 
       {/* ROOM CHAT VIEW: when a room is active, show dedicated UI overlay */}
-      {createdRoom && (
-        <RoomChat
-          roomId={createdRoom}
-          participants={participants}
-          messages={messages}
-          onSend={async (t: string) => {
-            await postMessage(name || 'me', t);
-          }}
-          onLeave={() => {
-            stopPolling();
-            setCreatedRoom(null);
-            setShareLink(null);
-            setInput('');
-          }}
-        />
-      )}
+{createdRoom && (
+  <RoomChat
+    roomId={createdRoom}
+    participants={participants}
+    messages={messages}
+    setMessages={setMessages}
+    onSend={async (t: string) => {
+      await postMessage(name || 'me', t);
+    }}
+    onLeave={() => {
+      stopPolling();
+      setCreatedRoom(null);
+      setShareLink(null);
+      setInput('');
+    }}
+    currentUserName={name || 'me'}  // <-- add this
+  />
+)}
+
     </View>
   );
 }

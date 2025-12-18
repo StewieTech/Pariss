@@ -64,7 +64,7 @@ const SendButton = forwardRef(function SendButton({ text, setText, messages, set
   // Expose send() so parent can trigger on Enter
   useImperativeHandle(ref, () => ({ send: sendAction }), [text, disabled, mode, messages, isSending]);
 
-  return <Button title={isSending ? 'Sending...' : 'Send'} onPress={sendAction} disabled={Boolean(disabled) || isSending} />;
+  return <Button title={isSending ? 'Sending...' : 'TheSend'} onPress={sendAction} disabled={Boolean(disabled) || isSending} />;
 });
 
 export default SendButton;

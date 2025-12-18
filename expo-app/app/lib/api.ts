@@ -26,10 +26,13 @@ export async function postPvpMessage(roomId: string, author: string, text: strin
   return res.data;
 }
 
-export async function getPvpRoom(roomId: string) : Promise<PvpRoom> {
-  const res = await client.get(`/pvp/${roomId}`);
+// lib/api.ts
+export async function getPvpRoom(roomId: string, sinceTs?: number) : Promise<PvpRoom> {
+  const qs = typeof sinceTs === 'number' ? `?sinceTs=${encodeURIComponent(String(sinceTs))}` : '';
+  const res = await client.get(`/pvp/${roomId}${qs}`);
   return res.data;
 }
+
 
 export async function suggestReplies(roomId: string, lastText: string) {
   const res = await client.post(`/pvp/${roomId}/suggest`, { text: lastText });
