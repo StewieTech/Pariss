@@ -7,7 +7,7 @@ import { getSuggestions as suggestService } from '../services/suggest.service';
 
 type MessageDoc = {
   roomId: string;
-  name: string;
+  author: string;
   text: string;
   ts: number;
 };
@@ -48,8 +48,8 @@ export async function createRoom(_req: Request, res: Response) {
 // Join a room
 export async function joinRoom(req: Request, res: Response) {
   const { id } = req.params;
-  const name = String(req.body?.name || '').trim();
-  if (!name) return res.status(400).json({ error: 'name required' });
+  const author = String(req.body?.author || req.body?.name || '').trim();
+  if (!author) return res.status(400).json({ error: 'name required' });
 
   const db = await getDb();
 
@@ -59,7 +59,7 @@ export async function joinRoom(req: Request, res: Response) {
   await db.collection(ROOMS).updateOne(
     { _id: id },
     {
-      $addToSet: { participants: name },
+      $addToSet: { participants: author },
       $set: { updatedAt: Date.now() },
     }
   );
@@ -78,7 +78,7 @@ export async function joinRoom(req: Request, res: Response) {
     ok: true,
     roomId: id,
     participants: ((updatedRoom as any)?.participants || []) as string[],
-    messages: messages.map((m) => ({ name: m.name, text: m.text, ts: m.ts })),
+    messages: messages.map((m) => ({ author: m.author, text: m.text, ts: m.ts })),
   });
 }
 
@@ -97,7 +97,7 @@ export async function postMessage(req: Request, res: Response) {
   const room = await db.collection(ROOMS).findOne({ _id: id });
   if (!room) return res.status(404).json({ error: 'room not found' });
 
-  const msg: MessageDoc = { roomId: id, name: author, text, ts: Date.now() };
+  const msg: MessageDoc = { roomId: id, author: author, text, ts: Date.now() };
 
   await db.collection<MessageDoc>(MSGS).insertOne(msg);
 
@@ -127,7 +127,7 @@ export async function postMessage(req: Request, res: Response) {
     }
   }
 
-  return res.json({ ok: true, message: { name: msg.name, text: msg.text, ts: msg.ts } });
+  return res.json({ ok: true, message: { author: msg.author, text: msg.text, ts: msg.ts } });
 }
 
 // Get room state (supports polling via sinceTs)
@@ -153,7 +153,7 @@ export async function getRoomState(req: Request, res: Response) {
   return res.json({
     roomId: id,
     participants: ((room as any)?.participants || []) as string[],
-    messages: messages.map((m) => ({ name: m.name, text: m.text, ts: m.ts })),
+    messages: messages.map((m) => ({ author: m.author, text: m.text, ts: m.ts })),
   });
 }
 
