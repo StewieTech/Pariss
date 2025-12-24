@@ -3,7 +3,9 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import pino from 'pino';
-import { connectDb } from './config/db';
+// import { connectDb } from './config/db';
+import { getMongoClient } from './lib/mongo';
+import { ensureIndexes } from './lib/ensureIndexes';
 import chatRouter from './routes/chat.routes';
 import miscRouter from './routes/misc.routes';
 import pvpRouter from './routes/pvp.routes';
@@ -15,29 +17,25 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-app.get('/_health', (req, res) => res.json({ status: 'ok' }));
-// app.use('/api/v1/chat', chatRouter);
+// Ensure Mongo indexes at startup (safe to call multiple times)
+ensureIndexes().catch((e) => {
+  logger.warn({ err: String((e as any)?.message || e) }, 'ensureIndexes failed');
+});
+
+app.get('/_health', async (_req, res) => {
+  try {
+    // optional: ping DB to confirm connectivity
+    await (await getMongoClient()).db(process.env.MONGODB_DB || 'paris_dev').command({ ping: 1 });
+    res.json({ status: 'ok', db: 'ok' });
+  } catch (e: any) {
+    res.json({ status: 'ok', db: 'down', error: String(e?.message || e) });
+  }
+});
+
 app.use('/chat', chatRouter);
-// voiceRouter provides POST /chat/tts which proxies ElevenLabs TTS via the server-side service
 app.use('/chat', voiceRouter);
 app.use('/pvp', pvpRouter);
 app.use('/api/v1', miscRouter);
 
-
 const PORT = process.env.PORT || 4000;
-
-connectDb()
-  .then(() => {
-    app.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
-  })
-  .catch((err) => {
-    // include error details and stack for easier local debugging
-    try {
-      logger.error({ err: err && (err.stack || err.message || err) }, 'Failed to start');
-    } catch (logErr) {
-      // fallback simple log
-      // eslint-disable-next-line no-console
-      console.error('Failed to start', err);
-    }
-    process.exit(1);
-  });
+app.listen(PORT, () => logger.info(`Server running on port ${PORT}`));

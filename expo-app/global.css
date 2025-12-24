@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Prevent horizontal overflow and ensure responsive sizing */
+html, body, #root {
+	width: 100%;
+	min-width: 0;
+	overflow-x: hidden;
+	-webkit-overflow-scrolling: touch;
+}
+
+/* Use border-box everywhere to make width calculations predictable */
+*, *::before, *::after {
+	box-sizing: border-box;
+}
+
+/* Avoid iOS Safari zoom on input focus by ensuring readable font sizes */
+input, textarea, button, select {
+	font-size: 16px;
+	-webkit-text-size-adjust: 100%;
+}
+
+/* Ensure main app root stretches full height */
+#root, .app-root, .expo-root {
+	min-height: 100vh;
+}
+
+/* Utility to ensure images and other elements don't overflow horizontally */
+img, video, canvas {
+	max-width: 100%;
+	height: auto;
+}
+

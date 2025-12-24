@@ -6,22 +6,32 @@
   "dependencies": {
     "@expo/webpack-config": "^19.0.0",
     "@types/react": "~18.2.14",
+    "autoprefixer": "^10.4.21",
     "axios": "^1.4.0",
     "expo": "~54.0.0",
     "expo-av": "^16.0.7",
+    "expo-blur": "^15.0.7",
+    "expo-linear-gradient": "^15.0.7",
     "expo-status-bar": "~1.6.0",
+    "nativewind": "^4.2.1",
+    "postcss": "^8.5.6",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-native": "0.73.0",
-    "react-native-web": "~0.19.6"
+    "react-native-reanimated": "~4.1.1",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-web": "~0.19.6",
+    "react-native-worklets": "0.5.1"
   },
   "scripts": {
-    "start": "expo start",
-    "dev": "expo start --dev-client",
+    "start": "npx expo start",
+    "dev": "npx expo start -c --dev-client",
     "test": "jest --passWithNoTests",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+  "eas:web": "npx eas build --platform web",
+  "build:web": "expo export -p web --output-dir web-build",
     "smoke": "node ./scripts/smoketest.js",
     "export:web": "expo export:web",
     "export:web:prod": "cross-env EXPO_API_URL=https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws expo export:web"
@@ -37,6 +47,7 @@
     "jest-expo": "^54.0.13",
     "metro-react-native-babel-preset": "0.77.0",
     "react-test-renderer": "18.2.0",
+    "tailwindcss": "^3.4.1",
     "ts-jest": "^29.4.5"
   }
 }

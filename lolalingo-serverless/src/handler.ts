@@ -2,15 +2,19 @@ import type { APIGatewayProxyResult, Context } from 'aws-lambda';
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { handleChat } from '../../src/services/chat.service';
 import { postTranslate } from '../../src/controllers/chat.controller';
-import { createRoom, joinRoom, postMessage, getRoomState, suggestReplies } from '../../src/controllers/pvp.controller';
+import { createRoom, joinRoom, postMessage, getRoomState, suggestReplies, listRooms } from '../../src/controllers/pvp.controller';
 import { synthesize } from '../../src/services/voice.service';
+import { ensureIndexes } from '../../src/lib/ensureIndexes';
 
 type Req = {
   rawPath?: string;
+  rawQueryString?: string; 
+  queryStringParameters?: Record<string,string>;
   requestContext?: { http?: { method?: string; path?: string } };
   body?: string;
   headers?: Record<string, string>;
 };
+
 
 const ssm = new SSMClient({});
 
@@ -56,6 +60,9 @@ function json(_event: Req, statusCode: number, data: unknown): APIGatewayProxyRe
 // Single Lambda "http" entry compatible with Function URLs
 export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyResult> {
   try {
+    // Best-effort: ensure indexes exist on cold start
+    ensureIndexes().catch(() => {});
+
     const method = event?.requestContext?.http?.method || "GET";
     const path = event?.rawPath || event?.requestContext?.http?.path || "/";
 
@@ -80,6 +87,24 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
     } catch (e) {
       // ignore; controllers will handle missing key
     }
+
+    // Ensure MongoDB env vars are available (once per cold start)
+    try {
+      const envAlias = process.env.ENV_ALIAS || "staging";
+
+      if (!process.env.MONGODB_URI) {
+        const uri = await getParam(`/lola/${envAlias}/MONGODB_URI`, true);
+        if (uri) process.env.MONGODB_URI = uri;
+      }
+
+      if (!process.env.MONGODB_DB) {
+        const db = await getParam(`/lola/${envAlias}/MONGODB_DB`, false);
+        if (db) process.env.MONGODB_DB = db;
+      }
+    } catch {
+      // let controllers fail loudly if missing
+    }
+
 
     if (path === "/health") {
       return json(event, 200, { ok: true, env: process.env.ENV_ALIAS || "unknown" });
@@ -221,11 +246,11 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
         // return binary response with proper headers (no custom CORS here)
         return {
           statusCode: 200,
-          isBase64Encoded: true,
           headers: {
             'content-type': out.contentType,
           },
-          body: bodyBase64
+          body: bodyBase64,
+          isBase64Encoded: false
         };
       } catch (err: any) {
         const errorId = shortId('e_tts_');
@@ -237,6 +262,11 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
     // pvp routes: create, join, message, get state, suggest
     if (path.startsWith('/pvp')) {
       try {
+        if (path === '/pvp/rooms' && method === 'GET') {
+          const out = await callController(listRooms, event);
+          if (out && out.__status) return json(event, out.__status, out.body);
+          return json(event, 200, out ?? {});
+        }
         if (path === '/pvp/create' && method === 'POST') {
           const out = await callController(createRoom, event);
           return json(event, 200, out ?? {});
