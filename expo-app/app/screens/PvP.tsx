@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import { usePvpRoom } from '../hooks/usePvpRoom';
 import * as api from '../lib/api';
 import { sanitizeVariant } from '../lib/sanitize';
 import { API } from '../lib/config';
-import { translateFirst } from '../components/TranslateButton';
+import { translateFirst as translateFirstUtil } from '../components/TranslateButton';
 
 // Simple Tailwind-styled button
 type ButtonProps = {
@@ -49,6 +49,10 @@ type RoomSummary = {
   id: string;
   shareLink: string | null;
   participantCount?: number;
+  createdAt?: number;
+  updatedAt?: number;
+  joinPath?: string;
+  participants?: string[];
 };
 
 export default function PvPScreen() {
@@ -69,7 +73,7 @@ export default function PvPScreen() {
     create,
     join,
     postMessage,
-    translateFirst,
+  translateFirst,
     suggestReplies,
     stopPolling,
   } = usePvpRoom();
@@ -79,23 +83,42 @@ export default function PvPScreen() {
   );
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
-  function upsertRoom(id: string, link: string | null, count?: number) {
-    if (!id) return;
-    setRooms((prev) => {
-      const existingIdx = prev.findIndex((r) => r.id === id);
-      if (existingIdx === -1) {
-        return [...prev, { id, shareLink: link, participantCount: count }];
-      }
-      const existing = prev[existingIdx];
-      const updated = [...prev];
-      updated[existingIdx] = {
-        ...existing,
-        shareLink: link ?? existing.shareLink,
-        participantCount: typeof count === 'number' ? count : existing.participantCount,
-      };
-      return updated;
-    });
+  function setRoomsFromBackend(payload: any) {
+    const list = (payload?.rooms || []) as any[];
+    setRooms(
+      list
+        .map((r) => ({
+          id: String(r.roomId || r.id || ''),
+          shareLink: null,
+          participantCount: Number(
+            r.participantCount ??
+              (Array.isArray(r.participants) ? r.participants.length : undefined)
+          ),
+          createdAt: Number(r.createdAt || 0) || undefined,
+          updatedAt: Number(r.updatedAt || 0) || undefined,
+          joinPath: String(r.joinPath || ''),
+          participants: Array.isArray(r.participants) ? r.participants : undefined,
+        }))
+        .filter((r) => r.id)
+    );
   }
+
+  async function refreshRooms() {
+    try {
+      const out = await api.listPvpRooms(20);
+      if (out?.ok) setRoomsFromBackend(out);
+    } catch (e) {
+      console.error('list rooms failed', e);
+    }
+  }
+
+  useEffect(() => {
+    refreshRooms();
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'live') refreshRooms();
+  }, [tab]);
 
   async function handleCreate() {
     try {
@@ -107,9 +130,7 @@ export default function PvPScreen() {
       setCreatedRoom(id || null);
       setShareLink(invite || null);
 
-      if (id) {
-        upsertRoom(id, invite || null, undefined);
-      }
+      await refreshRooms();
     } catch (e) {
       console.error('create failed', e);
     }
@@ -121,8 +142,7 @@ export default function PvPScreen() {
     try {
       await join(roomId, name);
       setCreatedRoom(roomId);
-      const count = Array.isArray(participants) ? participants.length : undefined;
-      upsertRoom(roomId, shareLink || null, count);
+      await refreshRooms();
     } catch (e) {
       console.error('join failed', e);
     }
@@ -323,12 +343,12 @@ export default function PvPScreen() {
                       <Text className="text-xs text-gray-700 mt-1">
                         Participants: {typeof room.participantCount === 'number' ? room.participantCount : (isCurrent ? participants.length : '—')}
                       </Text>
-                      {room.shareLink && (
+                      {room.joinPath && (
                         <Text
                           className="text-xs text-gray-600 mt-1"
                           numberOfLines={1}
                         >
-                          {room.shareLink}
+                          {room.joinPath}
                         </Text>
                       )}
                       {isCurrent && participants.length > 0 && (

@@ -2,8 +2,9 @@ import type { APIGatewayProxyResult, Context } from 'aws-lambda';
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { handleChat } from '../../src/services/chat.service';
 import { postTranslate } from '../../src/controllers/chat.controller';
-import { createRoom, joinRoom, postMessage, getRoomState, suggestReplies } from '../../src/controllers/pvp.controller';
+import { createRoom, joinRoom, postMessage, getRoomState, suggestReplies, listRooms } from '../../src/controllers/pvp.controller';
 import { synthesize } from '../../src/services/voice.service';
+import { ensureIndexes } from '../../src/lib/ensureIndexes';
 
 type Req = {
   rawPath?: string;
@@ -59,6 +60,9 @@ function json(_event: Req, statusCode: number, data: unknown): APIGatewayProxyRe
 // Single Lambda "http" entry compatible with Function URLs
 export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyResult> {
   try {
+    // Best-effort: ensure indexes exist on cold start
+    ensureIndexes().catch(() => {});
+
     const method = event?.requestContext?.http?.method || "GET";
     const path = event?.rawPath || event?.requestContext?.http?.path || "/";
 
@@ -258,6 +262,11 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
     // pvp routes: create, join, message, get state, suggest
     if (path.startsWith('/pvp')) {
       try {
+        if (path === '/pvp/rooms' && method === 'GET') {
+          const out = await callController(listRooms, event);
+          if (out && out.__status) return json(event, out.__status, out.body);
+          return json(event, 200, out ?? {});
+        }
         if (path === '/pvp/create' && method === 'POST') {
           const out = await callController(createRoom, event);
           return json(event, 200, out ?? {});

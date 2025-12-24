@@ -12,6 +12,13 @@ type MessageDoc = {
   ts: number;
 };
 
+type RoomDoc = {
+  _id: string;
+  createdAt: number;
+  updatedAt: number;
+  participants?: string[];
+};
+
 function makeId(len = 6) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let s = '';
@@ -25,6 +32,19 @@ function parseSinceTs(req: Request): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+function parseLimit(req: Request): number {
+  const raw = req.query?.limit as any;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 20;
+  return Math.min(100, Math.floor(n));
+}
+
+function parseSinceUpdatedAt(req: Request): number {
+  const raw = (req.query?.sinceUpdatedAt ?? req.query?.sinceUpdated ?? req.query?.since) as any;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 // Collections
 const ROOMS = 'pvp_rooms';
 const MSGS = 'pvp_messages';
@@ -34,15 +54,55 @@ export async function createRoom(_req: Request, res: Response) {
   const id = makeId();
   const db = await getDb();
 
-  await db.collection(ROOMS).insertOne({
+  const now = Date.now();
+
+  await db.collection<RoomDoc>(ROOMS).insertOne({
     _id: id,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
     participants: [], // string[]
   });
 
   // keep your existing response shape
   return res.json({ roomId: id, joinPath: `/pvp/${id}` });
+}
+
+// List rooms (backend-driven active rooms)
+// GET /pvp/rooms?limit=20&sinceUpdatedAt=...ms
+export async function listRooms(req: Request, res: Response) {
+  try {
+    const db = await getDb();
+    const limit = parseLimit(req);
+    const sinceUpdatedAt = parseSinceUpdatedAt(req);
+
+    const query: any = {};
+    if (sinceUpdatedAt > 0) query.updatedAt = { $gt: sinceUpdatedAt };
+
+    const rooms = await db
+      .collection<RoomDoc>(ROOMS)
+      .find(query)
+      .sort({ updatedAt: -1 })
+      .limit(limit)
+      .toArray();
+
+    return res.json({
+      ok: true,
+      rooms: rooms.map((r) => ({
+        roomId: r._id,
+        createdAt: Number((r as any).createdAt || 0),
+        updatedAt: Number((r as any).updatedAt || 0),
+        participantCount: Array.isArray((r as any).participants)
+          ? ((r as any).participants as string[]).length
+          : 0,
+        participants: Array.isArray((r as any).participants)
+          ? (((r as any).participants as string[]).slice(0, 50))
+          : undefined,
+        joinPath: `/pvp/${r._id}`,
+      })),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
 }
 
 // Join a room
@@ -53,10 +113,10 @@ export async function joinRoom(req: Request, res: Response) {
 
   const db = await getDb();
 
-  const room = await db.collection(ROOMS).findOne({ _id: id });
+  const room = await db.collection<RoomDoc>(ROOMS).findOne({ _id: id });
   if (!room) return res.status(404).json({ error: 'room not found' });
 
-  await db.collection(ROOMS).updateOne(
+  await db.collection<RoomDoc>(ROOMS).updateOne(
     { _id: id },
     {
       $addToSet: { participants: author },
@@ -72,7 +132,7 @@ export async function joinRoom(req: Request, res: Response) {
     .limit(200)
     .toArray();
 
-  const updatedRoom = await db.collection(ROOMS).findOne({ _id: id });
+  const updatedRoom = await db.collection<RoomDoc>(ROOMS).findOne({ _id: id });
 
   return res.json({
     ok: true,
@@ -94,7 +154,7 @@ export async function postMessage(req: Request, res: Response) {
 
   const db = await getDb();
 
-  const room = await db.collection(ROOMS).findOne({ _id: id });
+  const room = await db.collection<RoomDoc>(ROOMS).findOne({ _id: id });
   if (!room) return res.status(404).json({ error: 'room not found' });
 
   const msg: MessageDoc = { roomId: id, author: author, text, ts: Date.now() };
@@ -102,7 +162,7 @@ export async function postMessage(req: Request, res: Response) {
   await db.collection<MessageDoc>(MSGS).insertOne(msg);
 
   // keep room updated + add participant if new
-  await db.collection(ROOMS).updateOne(
+  await db.collection<RoomDoc>(ROOMS).updateOne(
     { _id: id },
     {
       $addToSet: { participants: author },
@@ -137,7 +197,7 @@ export async function getRoomState(req: Request, res: Response) {
 
   const db = await getDb();
 
-  const room = await db.collection(ROOMS).findOne({ _id: id });
+  const room = await db.collection<RoomDoc>(ROOMS).findOne({ _id: id });
   if (!room) return res.status(404).json({ error: 'room not found' });
 
   const query: any = { roomId: id };
@@ -164,7 +224,7 @@ export async function suggestReplies(req: Request, res: Response) {
   if (!text) return res.status(400).json({ error: 'text required' });
 
   const db = await getDb();
-  const room = await db.collection(ROOMS).findOne({ _id: id });
+  const room = await db.collection<RoomDoc>(ROOMS).findOne({ _id: id });
   if (!room) return res.status(404).json({ error: 'room not found' });
 
   try {

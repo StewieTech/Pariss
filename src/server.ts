@@ -5,6 +5,7 @@ import cors from 'cors';
 import pino from 'pino';
 // import { connectDb } from './config/db';
 import { getMongoClient } from './lib/mongo';
+import { ensureIndexes } from './lib/ensureIndexes';
 import chatRouter from './routes/chat.routes';
 import miscRouter from './routes/misc.routes';
 import pvpRouter from './routes/pvp.routes';
@@ -15,6 +16,11 @@ const app = express();
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
+
+// Ensure Mongo indexes at startup (safe to call multiple times)
+ensureIndexes().catch((e) => {
+  logger.warn({ err: String((e as any)?.message || e) }, 'ensureIndexes failed');
+});
 
 app.get('/_health', async (_req, res) => {
   try {

@@ -38,3 +38,22 @@ export async function suggestReplies(roomId: string, lastText: string) {
   const res = await client.post(`/pvp/${roomId}/suggest`, { text: lastText });
   return res.data;
 }
+
+export async function listPvpRooms(limit?: number, sinceUpdatedAt?: number) {
+  const params: string[] = [];
+  if (typeof limit === 'number') params.push(`limit=${encodeURIComponent(String(limit))}`);
+  if (typeof sinceUpdatedAt === 'number') params.push(`sinceUpdatedAt=${encodeURIComponent(String(sinceUpdatedAt))}`);
+  const qs = params.length ? `?${params.join('&')}` : '';
+  const res = await client.get(`/pvp/rooms${qs}`);
+  return res.data as {
+    ok: boolean;
+    rooms: Array<{
+      roomId: string;
+      createdAt: number;
+      updatedAt: number;
+      participantCount: number;
+      participants?: string[];
+      joinPath: string;
+    }>;
+  };
+}

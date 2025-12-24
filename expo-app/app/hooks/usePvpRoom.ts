@@ -5,6 +5,19 @@ import type { PvpRoom } from '../types/chat';
 
 type Msg = { name: string; text: string; ts: number };
 
+function normalizeMessages(raw: any[]): Msg[] {
+  return (raw || []).map((m: any) => ({
+    name: String(m?.name || m?.author || m?.authorName || 'unknown'),
+    text: String(m?.text || m?.content || m?.body || ''),
+    ts: Number(m?.ts || m?.ts_ms || Date.now()),
+  }));
+}
+
+// Stable dedupe key
+function msgKey(m: Msg) {
+  return `${m.name}::${m.ts}::${m.text}`;
+}
+
 export function usePvpRoom(initialRoomId?: string) {
   const roomIdRef = useRef<string | null>(initialRoomId ?? null);
   const lastTsRef = useRef<number>(0);
@@ -15,14 +28,6 @@ export function usePvpRoom(initialRoomId?: string) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  function normalizeMessages(raw: any[]): Msg[] {
-    return (raw || []).map((m: any) => ({
-      name: m.name || m.author || m.authorName || 'unknown',
-      text: m.text || m.content || m.body || String(m),
-      ts: Number(m.ts || m.ts_ms || Date.now()),
-    }));
-  }
-
   async function create() {
     setLoading(true);
     setError(null);
@@ -30,8 +35,14 @@ export function usePvpRoom(initialRoomId?: string) {
       const res = await api.createPvpRoom();
       if (res?.roomId) {
         roomIdRef.current = res.roomId;
+        lastTsRef.current = 0;
+        setMessages([]);
+        setParticipants([]);
       }
       return res;
+    } catch (e: any) {
+      setError(String(e?.message || e));
+      throw e;
     } finally {
       setLoading(false);
     }
@@ -50,19 +61,24 @@ export function usePvpRoom(initialRoomId?: string) {
       }
 
       const normalized = normalizeMessages(res.messages || []);
+      // Replace on join (canonical history)
       setMessages(normalized);
 
-      const maxTs = normalized.reduce((m, x) => Math.max(m, x.ts), 0);
-      lastTsRef.current = maxTs;
-
+      // participants can be from API or derived
       const parts =
         res.participants ||
-        Array.from(new Set(normalized.map((m) => m.name)));
+        Array.from(new Set(normalized.map((m) => m.name))).filter(Boolean);
 
       setParticipants(parts);
 
+      // Set lastTs to max ts in joined history
+      lastTsRef.current = normalized.reduce((mx, m) => Math.max(mx, m.ts), 0);
+
       startPolling(id);
       return res;
+    } catch (e: any) {
+      setError(String(e?.message || e));
+      throw e;
     } finally {
       setLoading(false);
     }
@@ -74,16 +90,34 @@ export function usePvpRoom(initialRoomId?: string) {
       const s = await api.getPvpRoom(id, sinceTs);
 
       if ((s as any)?.participants) {
-        setParticipants((s as any).participants);
+        setParticipants((s as any).participants || []);
       }
 
       const incoming = normalizeMessages((s as any)?.messages || []);
       if (!incoming.length) return;
 
-      setMessages((prev) => [...prev, ...incoming]);
+      // Merge + dedupe
+      setMessages((prev) => {
+        const seen = new Set(prev.map(msgKey));
+        const next = [...prev];
 
-      const maxTs = incoming.reduce((m, x) => Math.max(m, x.ts), sinceTs);
-      lastTsRef.current = Math.max(lastTsRef.current, maxTs);
+        for (const m of incoming) {
+          const k = msgKey(m);
+          if (!seen.has(k)) {
+            seen.add(k);
+            next.push(m);
+          }
+        }
+
+        // Keep messages ordered by ts (optional but helps UI consistency)
+        next.sort((a, b) => a.ts - b.ts);
+
+        // Advance lastTs based on merged set
+        const maxTs = next.reduce((mx, m) => Math.max(mx, m.ts), 0);
+        lastTsRef.current = Math.max(lastTsRef.current, maxTs);
+
+        return next;
+      });
     } catch (e: any) {
       setError(String(e?.message || e));
     }
@@ -96,13 +130,56 @@ export function usePvpRoom(initialRoomId?: string) {
       return;
     }
 
-    const ts = Date.now();
-    // optimistic
-    setMessages((prev) => [...prev, { name: author, text, ts }]);
-    lastTsRef.current = Math.max(lastTsRef.current, ts);
+    const optimisticTs = Date.now();
+    const optimisticMsg: Msg = { name: author, text, ts: optimisticTs };
+
+    // Optimistic insert (deduped)
+    setMessages((prev) => {
+      const seen = new Set(prev.map(msgKey));
+      const k = msgKey(optimisticMsg);
+      if (seen.has(k)) return prev;
+      const next = [...prev, optimisticMsg];
+      next.sort((a, b) => a.ts - b.ts);
+      return next;
+    });
+
+    lastTsRef.current = Math.max(lastTsRef.current, optimisticTs);
 
     try {
-      await api.postPvpMessage(roomId, author, text);
+      const res = await api.postPvpMessage(roomId, author, text);
+
+      // If server returns the canonical message (recommended), reconcile.
+      const serverMsgRaw = res?.message;
+      if (serverMsgRaw) {
+        const serverMsg: Msg = {
+          name: String(serverMsgRaw.author || serverMsgRaw.name || author),
+          text: String(serverMsgRaw.text || text),
+          ts: Number(serverMsgRaw.ts || optimisticTs),
+        };
+
+        setMessages((prev) => {
+          // remove the optimistic one if it matches author+text and close-in-time
+          const filtered = prev.filter((m) => {
+            const sameAuthor = m.name === optimisticMsg.name;
+            const sameText = m.text === optimisticMsg.text;
+            const closeTs = Math.abs(m.ts - optimisticMsg.ts) <= 3000; // 3s window
+            // drop optimistic if close match
+            return !(sameAuthor && sameText && closeTs);
+          });
+
+          const seen = new Set(filtered.map(msgKey));
+          const k = msgKey(serverMsg);
+          const next = seen.has(k) ? filtered : [...filtered, serverMsg];
+          next.sort((a, b) => a.ts - b.ts);
+
+          const maxTs = next.reduce((mx, m) => Math.max(mx, m.ts), 0);
+          lastTsRef.current = Math.max(lastTsRef.current, maxTs);
+
+          return next;
+        });
+      }
+
+      return res;
     } catch (e: any) {
       setError(String(e?.message || e));
       throw e;
@@ -113,6 +190,7 @@ export function usePvpRoom(initialRoomId?: string) {
     stopPolling();
 
     let cancelled = false;
+
     const loop = async () => {
       if (cancelled) return;
       await refresh(id);
@@ -121,6 +199,7 @@ export function usePvpRoom(initialRoomId?: string) {
     };
 
     loop();
+
     return () => {
       cancelled = true;
       stopPolling();
@@ -149,6 +228,7 @@ export function usePvpRoom(initialRoomId?: string) {
     roomIdRef.current = initialRoomId;
     const stop = startPolling(initialRoomId);
     return () => stop?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialRoomId]);
 
   return {
