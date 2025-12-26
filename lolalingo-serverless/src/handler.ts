@@ -168,7 +168,7 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       const reqLike: any = {
         params: ({} as any),
         body: undefined,
-        query: {},
+            query: event.queryStringParameters || {},
         get: (h: string) => event.headers?.[h.toLowerCase()]
       };
       try { reqLike.body = event.body ? JSON.parse(event.body) : {}; } catch { reqLike.body = {}; }
@@ -250,7 +250,7 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
             'content-type': out.contentType,
           },
           body: bodyBase64,
-          isBase64Encoded: false
+          isBase64Encoded: true
         };
       } catch (err: any) {
         const errorId = shortId('e_tts_');
