@@ -25,7 +25,7 @@ git pull
 git checkout -b $Release
 
 # Build (adjust command to your actual build)
-npm ci
+# npm ci
 npx expo export -p web --output-dir web-build
 
 # Decide bucket
