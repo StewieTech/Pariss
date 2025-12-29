@@ -105,6 +105,17 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       // let controllers fail loudly if missing
     }
 
+    // Ensure ElevenLabs voice id is available (optional)
+    try {
+      const envAlias = process.env.ENV_ALIAS || 'staging';
+      if (!process.env.ELEVEN_VOICE_ID) {
+        const vid = await getParam(`/lola/${envAlias}/ELEVEN_VOICE_ID`, false);
+        if (vid) process.env.ELEVEN_VOICE_ID = vid;
+      }
+    } catch {
+      // optional
+    }
+
 
     if (path === "/health") {
       return json(event, 200, { ok: true, env: process.env.ENV_ALIAS || "unknown" });
@@ -243,19 +254,31 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
         // call service
         const out = await synthesize(text, voiceId || '');
         const bodyBase64 = out.buffer.toString('base64');
-        // return binary response with proper headers (no custom CORS here)
+
+        // IMPORTANT:
+        // The client expects the response body to be the raw base64 string (text/plain).
+        // Function URLs/APIGW base64 flags are for binary payloads; we are not returning binary here.
         return {
           statusCode: 200,
           headers: {
-            'content-type': out.contentType,
+            'content-type': 'text/plain',
+            'x-audio-content-type': out.contentType || 'audio/mpeg',
           },
           body: bodyBase64,
-          isBase64Encoded: true
+          isBase64Encoded: false,
         };
       } catch (err: any) {
         const errorId = shortId('e_tts_');
-        log('error', 'tts route error', { errorId, err: String(err) });
-        return json(event, 500, { error: 'tts failed', details: err?.message ?? String(err), errorId });
+        log('error', 'tts route error', {
+          errorId,
+          message: err?.message ?? String(err),
+          status: err?.status,
+        });
+        return json(event, err?.status || 500, {
+          error: 'tts failed',
+          details: err?.message ?? String(err),
+          errorId,
+        });
       }
     }
 
