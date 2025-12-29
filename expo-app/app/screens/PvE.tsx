@@ -1,14 +1,19 @@
-import { useRef, useState } from "react";
-import client from "../lib/client";
-import { API } from "../lib/config";
-import styles from "../styles";
-import SendButton from "../components/SendButton";
-import { sanitizeVariant } from "../lib/utils";
-import { View, Text, TextInput, Button, FlatList, TouchableOpacity, Platform } from 'react-native';
-// import { speakText } from '../../app/services/voice';
-import { LolaVoiceButton } from "../components/LolaVoiceButton";
-import { translateFirst } from "../components/TranslateButton";
-import { LolaChatInput } from "../components/LolaChatInput";
+import { useRef, useState } from 'react';
+import SendButton from '../components/SendButton';
+import { sanitizeVariant } from '../lib/utils';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { LolaVoiceButton } from '../components/LolaVoiceButton';
+import { translateFirst, TranslateButton } from '../components/TranslateButton';
+import { LolaChatInput } from '../components/LolaChatInput';
+
+const COMPOSER_HEIGHT = 92; // tweak if needed
 
 export default function PvEScreen() {
   const [text, setText] = useState('');
@@ -18,108 +23,172 @@ export default function PvEScreen() {
   const [translateOptions, setTranslateOptions] = useState<string[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
 
-//   const webKeyDownProps: any = Platform.OS === 'web' ? {
-//     onKeyDown: (e: any) => {
-//       const key = e?.key ?? e?.nativeEvent?.key;
-//       const shift = e?.shiftKey ?? e?.nativeEvent?.shiftKey;
-//       const alt = e?.altKey ?? e?.nativeEvent?.altKey;
-//       const ctrl = e?.ctrlKey ?? e?.nativeEvent?.ctrlKey;
-//       const meta = e?.metaKey ?? e?.nativeEvent?.metaKey;
-//       if (key === 'Enter') {
-//         // only treat Enter as send when no modifier keys are pressed
-//         if (shift || alt || ctrl || meta) {
-//           // allow newline when any modifier is used
-//           return;
-//         }
-//         if (e.preventDefault) e.preventDefault();
-//         sendRef.current?.send && sendRef.current.send();
-//       }
-//     }
-//   } : {};
-
-
-//   async function translateFirst() {
-//     if (!text) return;
-//     setIsTranslating(true); setTranslateOptions([]);
-//     try {
-//       const res = await client.post(`${API}/chat/translate`, { text });
-//       const variants: string[] = res?.data?.variants ?? [];
-//       if (Array.isArray(variants) && variants.length > 0) setTranslateOptions(variants.slice(0,3)); else setTranslateOptions([String(res?.data?.variants || '(no variants)')]);
-//     } catch (e) { console.error('TranslateFirst failed', e); setTranslateOptions([`(translation failed) ${String(e)}`]); } finally { setIsTranslating(false); }
-//   }
+  const isWeb = Platform.OS === 'web';
 
   return (
-    <View style={{ flex: 1, padding: 12 }}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Have a Convo with LolaInParis :D Pick a Mode and Start Chatting</Text>
-        <View style={styles.modeRow}>
-          {/* map display labels to mode values */}
-          {([
-            { label: 'm1: LolaChat', value: 'm1' },
-            // { label: 'm2', value: 'm2' },
-            { label: 'm3: $ LolaVoice', value: 'm3' }
-          ] as const).map(mb => (
-            <TouchableOpacity key={mb.label} onPress={() => setMode(mb.value)} style={[styles.modeBtn, mode===mb.value && styles.modeBtnActive]}>
-              <Text style={styles.modeText}>{mb.label}</Text>
-            </TouchableOpacity>
-          ))}
+    <KeyboardAvoidingView
+      className="flex-1 bg-white"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 96 : 0}
+    >
+      <View className="flex-1 w-full self-center max-w-3xl px-3">
+        {/* Header */}
+        <View className="mb-3 pt-2">
+          <View className="flex-row mt-2 flex-wrap">
+            {([
+              { label: 'm1: LolaChat', value: 'm1' },
+              { label: 'm3: $ LolaVoice', value: 'm3' },
+            ] as const).map((mb) => (
+              <TouchableOpacity
+                key={mb.label}
+                onPress={() => setMode(mb.value)}
+                className={`px-3 py-2 rounded-full mr-2 border ${
+                  mode === mb.value
+                    ? 'bg-violet-600 border-violet-600'
+                    : 'bg-white border-gray-300'
+                }`}
+                activeOpacity={0.85}
+              >
+                <Text
+                  className={`text-sm font-semibold ${
+                    mode === mb.value ? 'text-white' : 'text-gray-800'
+                  }`}
+                >
+                  {mb.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
-      </View>
-        
-     
-      <FlatList
-        data={messages}
-        keyExtractor={(i, idx) => String(idx)}
-        renderItem={({ item, index }) => (
-          <View style={[styles.bubble, item?.role === 'user' ? styles.userBubble : styles.assistantBubble]}>
-            <Text>{item?.content}</Text>
-            {item?.role === 'assistant' && mode === 'm3' && (
-                <View style={{ marginTop: 6 }}>
-    <LolaVoiceButton lolaReply={item?.content} />
-  </View>
+
+        {/* List */}
+        <View className="flex-1">
+          <FlatList
+            data={messages}
+            keyExtractor={(i, idx) => String(idx)}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{
+              paddingBottom: isWeb ? COMPOSER_HEIGHT + 16 : 12,
+            }}
+            ListHeaderComponent={
+              translateOptions.length > 0 ? (
+                <View className="p-3 mb-3 rounded-2xl bg-amber-50 border border-amber-200">
+                  <Text className="font-semibold text-amber-900 mb-2">
+                    Choose a translation
+                  </Text>
+                  {translateOptions.map((opt) => (
+                    <TouchableOpacity
+                      key={opt}
+                      onPress={() => {
+                        setText(sanitizeVariant(opt));
+                        setTranslateOptions([]);
+                      }}
+                      className="px-3 py-2 rounded-xl bg-white border border-amber-100 mb-2"
+                      activeOpacity={0.85}
+                    >
+                      <Text className="text-gray-900">{opt}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null
+            }
+            renderItem={({ item }) => (
+              <View
+                className={`max-w-[85%] rounded-2xl px-3 py-2 mb-2 ${
+                  item?.role === 'user'
+                    ? 'self-end bg-violet-600'
+                    : 'self-start bg-violet-50 border border-violet-100'
+                }`}
+              >
+                <Text className={item?.role === 'user' ? 'text-white' : 'text-gray-900'}>
+                  {item?.content}
+                </Text>
+
+                {item?.role === 'assistant' && mode === 'm3' && (
+                  <View className="mt-2">
+                    <LolaVoiceButton lolaReply={item?.content} />
+                  </View>
+                )}
+              </View>
             )}
-          </View>
-        )}
-      />
-      <View style={styles.inputRow}>
-  <LolaChatInput
-    value={text}
-    onChangeText={setText}
-    onSend={() => {
-      if (sendRef.current?.send) {
-        sendRef.current.send();
-      }
-    }}
-    placeholder="Type..."
-    inputStyle={styles.input}
-  />
-        <View style={{ flexDirection: 'row' }}>
-          <View style={{ marginRight: 6 }}>
-            <Button
-              title={isTranslating ? 'Translating...' : 'Translate First'}
-              onPress={async () => {
-                if (!text) return;
-                setIsTranslating(true);
-                setTranslateOptions([]);
-                try {
-                  const variants = await translateFirst(text);
-                  setTranslateOptions(
-                    variants.length > 0 ? variants.slice(0, 3) : [ '(no variants)' ]
-                  );
-                } catch (e) {
-                  console.error('TranslateFirst failed', e);
-                  setTranslateOptions([`(translation failed) ${String(e)}`]);
-                } finally {
-                  setIsTranslating(false);
+          />
+        </View>
+
+        {/* Composer */}
+        <View
+          style={
+            isWeb
+              ? {
+                  position: 'fixed',
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'white',
+                  borderTopWidth: 1,
+                  borderTopColor: '#e5e7eb',
+                  paddingTop: 8,
+                  paddingBottom: 16,
+                  paddingLeft: 12,
+                  paddingRight: 12,
                 }
-              }}
-              disabled={isTranslating}
-            />
+              : {}
+          }
+          className={!isWeb ? 'border-t border-gray-200 bg-white pt-2 pb-4' : ''}
+        >
+          {/* keep the same max width on web fixed bar */}
+          <View className={isWeb ? 'w-full self-center max-w-3xl' : ''}>
+            <View className="flex-row items-end gap-2 px-1">
+              <View className="flex-1">
+                <LolaChatInput
+                  value={text}
+                  onChangeText={setText}
+                  onSend={() => sendRef.current?.send?.()}
+                  placeholder="Ask Lola Anything :)"
+                  inputStyle={{
+                    borderWidth: 1,
+                    borderColor: '#d1d5db',
+                    borderRadius: 16,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    minHeight: 44,
+                    maxHeight: 120,
+                  }}
+                />
+              </View>
+
+              <TranslateButton
+                title="Translate"
+                loadingTitle="Translating..."
+                loading={isTranslating}
+                disabled={!text}
+                onPress={async () => {
+                  if (!text) return;
+                  setIsTranslating(true);
+                  setTranslateOptions([]);
+                  try {
+                    const variants = await translateFirst(text);
+                    setTranslateOptions(variants.length ? variants.slice(0, 3) : ['(no variants)']);
+                  } catch (e) {
+                    console.error('TranslateFirst failed', e);
+                    setTranslateOptions([`(translation failed) ${String(e)}`]);
+                  } finally {
+                    setIsTranslating(false);
+                  }
+                }}
+              />
+
+              <SendButton
+                ref={sendRef}
+                text={text}
+                setText={setText}
+                messages={messages}
+                setMessages={setMessages}
+                mode={mode}
+              />
+            </View>
           </View>
-          <SendButton ref={sendRef} text={text} setText={setText} messages={messages} setMessages={setMessages} mode={mode} />
         </View>
       </View>
-      {translateOptions.length>0 && (<View style={styles.translatePanel}><Text style={{ fontWeight: '600', marginBottom: 6 }}>Choose a translation</Text>{translateOptions.map(opt=> (<TouchableOpacity key={opt} onPress={() => { setText(sanitizeVariant(opt)); setTranslateOptions([]); }} style={styles.translateOption}><Text>{opt}</Text></TouchableOpacity>))}</View>)}
-    </View>
+    </KeyboardAvoidingView>
   );
 }

@@ -22,6 +22,7 @@ aws sts get-caller-identity --profile asklolaai
 $env:AWS_PROFILE='asklolaai'
 $region='ca-central-1'
 $bucket='lola-prod'
+
 $bucket='lola-frontend'
 
 aws s3api create-bucket --bucket $bucket --region $region --create-bucket-configuration LocationConstraint=$region

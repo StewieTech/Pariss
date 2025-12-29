@@ -20,6 +20,8 @@ aws sts get-caller-identity --region ca-central-1
 aws configure --profile asklolaai
 $env:AWS_PROFILE = 'asklolaai'
 $region = 'ca-central-1'
+$profile = 'asklolaai'
+
 $func='lola-api'
 $alias='prod'
 $funcUrl = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws/chat/translate'
@@ -55,7 +57,6 @@ npx serverless deploy --region ca-central-1 --stage dev --aws-profile asklolaai
 
 
 $env:EXPO_API_URL='https://<prod-function-url>'; expo export:web
-aws s3 sync .\web-build\ s3://lola-frontend-prod --delete --region ca-central-1
 
 # publish + alias + alias-URL (promote script)
 ## This publishes a new version apparently
@@ -110,6 +111,10 @@ $b64 = Invoke-RestMethod -Method Post -Uri http://192.168.2.44:4000/chat/tts -Bo
 
 # create/overwrite the secure SSM parameter for the 'staging' alias
 aws ssm put-parameter --name "/lola/staging/ELEVEN_API_KEY" --value "sk-REPLACE_WITH_YOUR_KEY" --type SecureString --overwrite --region ca-central-1 --profile asklolaai
+aws ssm put-parameter --name "/lola/staging/MONGODB_URI" --value "$mongoUri" --type SecureString --overwrite --region ca-central-1 --profile asklolaai
+aws ssm put-parameter --name "/lola/prod/MONGODB_URI" --value "$mongoUri" --type SecureString --overwrite --region ca-central-1 --profile asklolaai
+aws ssm put-parameter --name "/lola/staging/MONGODB_DB" --value "paris_dev" --type String --overwrite --region ca-central-1 --profile asklolaai
+aws ssm put-parameter --name "/lola/prod/MONGODB_DB" --value "paris_dev" --type String --overwrite --region ca-central-1 --profile asklolaai
 
 # optional: set default voice id too (plain string)
 aws ssm put-parameter --name "/lola/staging/ELEVEN_VOICE_ID" --value "LEnmbrrxYsUYS7vsRRwD" --type String --overwrite --region ca-central-1 --profile asklolaai

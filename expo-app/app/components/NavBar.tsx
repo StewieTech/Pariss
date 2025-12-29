@@ -11,22 +11,27 @@ export default function NavBar({ current, onNav }: { current: string; onNav: (s:
         key={key}
         testID={`nav-${key}`}
         onPress={() => onNav(key)}
-        className={`flex-1 mx-1 py-3 rounded-2xl items-center justify-center ${
+        className={`mx-1 flex-shrink basis-0 px-3 py-2 rounded-2xl items-center justify-center ${
           active ? 'bg-white text-brand-600' : 'bg-white/10'
         }`}
       >
-        <Text className={`text-lg font-bold ${active ? 'text-brand-600' : 'text-white'}`}>{label}</Text>
+        <Text
+          className={`px-1 py-0.5 text-center text-lg font-bold ${active ? 'text-brand-600' : 'text-white'}`}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
       </TouchableOpacity>
     );
   };
 
   return (
     // big bubbly purple nav with three evenly spaced options
-    <BV intensity={30} tint="dark" className="mx-3 mt-3 rounded-2xl overflow-hidden bg-brand-600">
-<View className="flex-row items-center justify-around px-3 py-3">
+    <BV intensity={30} tint="dark" className="mx-3 mt-2 rounded-2xl overflow-hidden bg-brand-600">
+      <View className="flex-row items-center justify-center px-3 py-2">
         {tab('main', 'Main')}
         {tab('pve', 'Talk to Lola')}
-        {tab('pvp', 'Talk to Friends TBD')}
+        {tab('pvp', 'Talk to Friends')}
       </View>
     </BV>
   );

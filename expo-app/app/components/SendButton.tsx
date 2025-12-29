@@ -1,7 +1,7 @@
-import { Button, Alert } from 'react-native';
-import { forwardRef, useImperativeHandle, useState, useRef } from 'react';
-import { API } from "../lib/config";
-import client from "../lib/client";
+import { Text, TouchableOpacity } from 'react-native';
+import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import { API } from '../lib/config';
+import client from '../lib/client';
 
 type Props = {
   text: string;
@@ -13,9 +13,14 @@ type Props = {
   // Optional mode for backend chat
   mode?: 'm1' | 'm2' | 'm3';
   disabled?: boolean;
+  label?: string;
+  className?: string;
 };
 
-const SendButton = forwardRef(function SendButton({ text, setText, messages, setMessages, onSend, mode, disabled }: Props, ref) {
+const SendButton = forwardRef(function SendButton(
+  { text, setText, messages, setMessages, onSend, mode, disabled, label, className }: Props,
+  ref
+) {
   const [isSending, setIsSending] = useState(false);
   const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // immediate sending lock to prevent duplicate sends within the same event loop
@@ -64,7 +69,26 @@ const SendButton = forwardRef(function SendButton({ text, setText, messages, set
   // Expose send() so parent can trigger on Enter
   useImperativeHandle(ref, () => ({ send: sendAction }), [text, disabled, mode, messages, isSending]);
 
-  return <Button title={isSending ? 'Sending...' : 'TheSend'} onPress={sendAction} disabled={Boolean(disabled) || isSending} />;
+  const isDisabled = Boolean(disabled) || isSending || !text;
+  const title = isSending ? 'Sending...' : label || 'Send';
+
+  return (
+    <TouchableOpacity
+      onPress={isDisabled ? undefined : sendAction}
+      activeOpacity={isDisabled ? 1 : 0.85}
+      className={`px-4 py-3 rounded-2xl items-center justify-center ${
+        isDisabled ? 'bg-gray-200 border border-gray-200' : 'bg-violet-600'
+      } ${className || ''}`}
+    >
+      <Text
+        className={`text-sm font-semibold ${
+          isDisabled ? 'text-gray-600' : 'text-white'
+        }`}
+      >
+        {title}
+      </Text>
+    </TouchableOpacity>
+  );
 });
 
 export default SendButton;

@@ -4,10 +4,19 @@
 
 /* Prevent horizontal overflow and ensure responsive sizing */
 html, body, #root {
+	height: 100%;
 	width: 100%;
-	min-width: 0;
-	overflow-x: hidden;
-	-webkit-overflow-scrolling: touch;
+	margin: 0;
+	padding: 0;
+	/* min-width: 0; */
+	/* overflow-x: hidden; */
+	/* -webkit-overflow-scrolling: touch; */
+}
+
+/* Helps iOS Safari where 100% height can be weird */
+body {
+  min-height: 100vh;
+  min-height: 100dvh; /* modern dynamic viewport */
 }
 
 /* Use border-box everywhere to make width calculations predictable */

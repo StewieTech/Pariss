@@ -30,6 +30,11 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+
+    "promote:preprod": "powershell -ExecutionPolicy Bypass -File scripts/promote.ps1 -Env preprod",
+    "promote:prod": "powershell -ExecutionPolicy Bypass -File scripts/promote.ps1 -Env prod",
+    "sync:prod": "aws s3 sync .\\web-build\\ s3://lola-prod --delete --region ca-central-1",
+
   "eas:web": "npx eas build --platform web",
   "build:web": "expo export -p web --output-dir web-build",
     "smoke": "node ./scripts/smoketest.js",
