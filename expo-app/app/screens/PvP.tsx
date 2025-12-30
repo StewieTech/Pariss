@@ -475,8 +475,8 @@ export default function PvPScreen() {
     participants={participants}
     messages={messages}
     setMessages={setMessages}
-    onSend={async (t: string) => {
-      await postMessage(name || 'me', t);
+    onSend={async (t: string, opts) => {
+      await postMessage(name || 'me', t, opts);
     }}
     onLeave={() => {
       stopPolling();
@@ -484,7 +484,7 @@ export default function PvPScreen() {
       setShareLink(null);
       setInput('');
     }}
-    currentUserName={name || 'me'}  // <-- add this
+    currentUserName={name || 'me'}
   />
 )}
 

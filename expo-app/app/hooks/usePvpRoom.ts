@@ -125,6 +125,13 @@ export function usePvpRoom(initialRoomId?: string) {
   }
 
   async function postMessage(author: string, text: string) {
+  }
+
+  async function postMessageWithLola(
+    author: string,
+    text: string,
+    options?: { includeLola?: boolean; mode?: 'm1' | 'm2' | 'm3' }
+  ) {
     const roomId = roomIdRef.current;
     if (!roomId) {
       console.warn('postMessage called without roomId');
@@ -147,7 +154,13 @@ export function usePvpRoom(initialRoomId?: string) {
     lastTsRef.current = Math.max(lastTsRef.current, optimisticTs);
 
     try {
-      const res = await api.postPvpMessage(roomId, author, text);
+      const clientMessageId = `c_${optimisticTs}_${Math.random().toString(36).slice(2, 9)}`;
+
+      const res = await api.postPvpMessageV2(roomId, author, text, {
+        includeLola: Boolean(options?.includeLola),
+        mode: options?.mode,
+        clientMessageId,
+      });
 
       // If server returns the canonical message (recommended), reconcile.
       const serverMsgRaw = res?.message;
@@ -241,7 +254,7 @@ export function usePvpRoom(initialRoomId?: string) {
     create,
     join,
     refresh,
-    postMessage,
+    postMessage: postMessageWithLola,
     translateFirst,
     suggestReplies,
     stopPolling,
