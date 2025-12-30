@@ -12,6 +12,8 @@ import {
 import { LolaVoiceButton } from '../components/LolaVoiceButton';
 import { translateFirst, TranslateButton } from '../components/TranslateButton';
 import { LolaChatInput } from '../components/LolaChatInput';
+import ModeToggle from '../components/ModeToggle';
+import ChatBubble from '../components/ChatBubble';
 
 const COMPOSER_HEIGHT = 92; // tweak if needed
 
@@ -34,31 +36,14 @@ export default function PvEScreen() {
       <View className="flex-1 w-full self-center max-w-3xl px-3">
         {/* Header */}
         <View className="mb-3 pt-2">
-          <View className="flex-row mt-2 flex-wrap">
-            {([
+          <ModeToggle<'m1' | 'm2' | 'm3'>
+            value={mode}
+            onChange={setMode}
+            items={[
               { label: 'm1: LolaChat', value: 'm1' },
               { label: 'm3: $ LolaVoice', value: 'm3' },
-            ] as const).map((mb) => (
-              <TouchableOpacity
-                key={mb.label}
-                onPress={() => setMode(mb.value)}
-                className={`px-3 py-2 rounded-full mr-2 border ${
-                  mode === mb.value
-                    ? 'bg-violet-600 border-violet-600'
-                    : 'bg-white border-gray-300'
-                }`}
-                activeOpacity={0.85}
-              >
-                <Text
-                  className={`text-sm font-semibold ${
-                    mode === mb.value ? 'text-white' : 'text-gray-800'
-                  }`}
-                >
-                  {mb.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+            ]}
+          />
         </View>
 
         {/* List */}
@@ -93,23 +78,15 @@ export default function PvEScreen() {
               ) : null
             }
             renderItem={({ item }) => (
-              <View
-                className={`max-w-[85%] rounded-2xl px-3 py-2 mb-2 ${
-                  item?.role === 'user'
-                    ? 'self-end bg-violet-600'
-                    : 'self-start bg-violet-50 border border-violet-100'
-                }`}
-              >
-                <Text className={item?.role === 'user' ? 'text-white' : 'text-gray-900'}>
-                  {item?.content}
-                </Text>
-
-                {item?.role === 'assistant' && mode === 'm3' && (
-                  <View className="mt-2">
+              <ChatBubble
+                role={item?.role}
+                content={item?.content}
+                footer={
+                  item?.role === 'assistant' && mode === 'm3' ? (
                     <LolaVoiceButton lolaReply={item?.content} />
-                  </View>
-                )}
-              </View>
+                  ) : null
+                }
+              />
             )}
           />
         </View>
@@ -130,7 +107,7 @@ export default function PvEScreen() {
                   paddingBottom: 16,
                   paddingLeft: 12,
                   paddingRight: 12,
-                }
+                } as any
               : {}
           }
           className={!isWeb ? 'border-t border-gray-200 bg-white pt-2 pb-4' : ''}

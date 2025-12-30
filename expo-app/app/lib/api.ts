@@ -26,6 +26,28 @@ export async function postPvpMessage(roomId: string, author: string, text: strin
   return res.data;
 }
 
+export type PostPvpMessageOptions = {
+  includeLola?: boolean;
+  mode?: 'm1' | 'm2' | 'm3';
+  clientMessageId?: string;
+};
+
+export async function postPvpMessageV2(
+  roomId: string,
+  author: string,
+  text: string,
+  options?: PostPvpMessageOptions
+) {
+  const res = await client.post(`/pvp/${roomId}/message`, {
+    author,
+    text,
+    includeLola: Boolean(options?.includeLola),
+    mode: options?.mode,
+    clientMessageId: options?.clientMessageId,
+  });
+  return res.data;
+}
+
 // lib/api.ts
 export async function getPvpRoom(roomId: string, sinceTs?: number) : Promise<PvpRoom> {
   const qs = typeof sinceTs === 'number' ? `?sinceTs=${encodeURIComponent(String(sinceTs))}` : '';

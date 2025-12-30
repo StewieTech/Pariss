@@ -20,12 +20,13 @@ Write-Host "=== Promote to $Env ==="
 Ensure-CleanGit
 
 git checkout master
+git merge developSIT
 git pull
 
 git checkout -b $Release
 
 # Build (adjust command to your actual build)
-npm ci
+# npm ci
 npx expo export -p web --output-dir web-build
 
 # Decide bucket
@@ -36,7 +37,10 @@ aws s3 sync ".\$BuildDir\" "s3://$bucket" --delete --region $Region
 # aws s3 sync .\wegb-build\ s3://lola-prod --delete --region $region
 
 # Optional: CloudFront invalidation (recommended)
-# aws cloudfront create-invalidation --distribution-id YOUR_DIST_ID --paths "/*"
+aws cloudfront create-invalidation `
+  --distribution-id E2CBKWKXA4R9J5 `
+  --paths "/*"
+
 
 git add -A
 git commit -m $Release

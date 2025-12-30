@@ -1,6 +1,7 @@
 // src/controllers/pvp.controller.ts
 import { Request, Response } from 'express';
 import { getDb } from '../lib/mongo';
+import { handleChat } from '../services/chat.service';
 
 // Suggest replies service
 import { getSuggestions as suggestService } from '../services/suggest.service';
@@ -10,6 +11,7 @@ type MessageDoc = {
   author: string;
   text: string;
   ts: number;
+  clientMessageId?: string;
 };
 
 type RoomDoc = {
@@ -150,6 +152,11 @@ export async function postMessage(req: Request, res: Response) {
   const author = String(req.body?.author || req.body?.name || '').trim();
   const text = String(req.body?.text || '').trim();
 
+  // Optional Lola behavior
+  const includeLola = Boolean(req.body?.includeLola);
+  const mode = (req.body?.mode as any) || 'm1';
+  const clientMessageId = String(req.body?.clientMessageId || '').trim() || undefined;
+
   if (!author || !text) return res.status(400).json({ error: 'author/name and text required' });
 
   const db = await getDb();
@@ -157,7 +164,19 @@ export async function postMessage(req: Request, res: Response) {
   const room = await db.collection<RoomDoc>(ROOMS).findOne({ _id: id });
   if (!room) return res.status(404).json({ error: 'room not found' });
 
-  const msg: MessageDoc = { roomId: id, author: author, text, ts: Date.now() };
+  // Best-effort idempotency: if a clientMessageId is supplied and already exists, return ok.
+  if (clientMessageId) {
+    const existing = await db.collection<MessageDoc>(MSGS).findOne({ roomId: id, clientMessageId });
+    if (existing) {
+      return res.json({
+        ok: true,
+        deduped: true,
+        message: { author: existing.author, text: existing.text, ts: existing.ts },
+      });
+    }
+  }
+
+  const msg: MessageDoc = { roomId: id, author: author, text, ts: Date.now(), clientMessageId };
 
   await db.collection<MessageDoc>(MSGS).insertOne(msg);
 
@@ -187,7 +206,53 @@ export async function postMessage(req: Request, res: Response) {
     }
   }
 
-  return res.json({ ok: true, message: { author: msg.author, text: msg.text, ts: msg.ts } });
+  const out: any = { ok: true, message: { author: msg.author, text: msg.text, ts: msg.ts } };
+
+  if (includeLola) {
+    try {
+      // Build short room history for Lola context (last 12 messages)
+      const recent = await db
+        .collection<MessageDoc>(MSGS)
+        .find({ roomId: id })
+        .sort({ ts: -1 })
+        .limit(12)
+        .toArray();
+
+      // Convert to a compact context string. (You said you'll tune prompts later.)
+      const contextLines = [...recent]
+        .reverse()
+        .map((m) => `${m.author}: ${m.text}`)
+        .join('\n');
+
+      const lolaInput = `Room ${id} conversation so far:\n${contextLines}\n\nUser (${author}) just said: ${text}`;
+
+      // Use room id as userId so message.repo history is room-scoped (simple, no schema change there)
+      const result = await handleChat({ userId: `room:${id}`, text: lolaInput, mode });
+      const replyText = String(result?.reply || '').trim() || 'Sorry, no reply.';
+
+      const lolaMsg: MessageDoc = {
+        roomId: id,
+        author: 'Lola',
+        text: replyText,
+        ts: Date.now(),
+      };
+
+      await db.collection<MessageDoc>(MSGS).insertOne(lolaMsg);
+
+      // bump room updatedAt for bot activity too
+      await db.collection<RoomDoc>(ROOMS).updateOne(
+        { _id: id },
+        { $set: { updatedAt: Date.now() } }
+      );
+
+      out.lola = { author: lolaMsg.author, text: lolaMsg.text, ts: lolaMsg.ts };
+    } catch (err: any) {
+      // Don't fail the user's send; return ok with error detail.
+      out.lolaError = String(err?.message || err);
+    }
+  }
+
+  return res.json(out);
 }
 
 // Get room state (supports polling via sinceTs)
