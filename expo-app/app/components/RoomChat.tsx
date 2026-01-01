@@ -1,12 +1,13 @@
 // components/RoomChat.tsx
 import React, { useRef, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import { LolaChatInput } from './LolaChatInput';
 import { sanitizeVariant } from '../lib/sanitize';
 import { translateFirst, TranslateButton } from './TranslateButton';
 import ModeToggle from './ModeToggle';
 import ChatBubble from './ChatBubble';
 import { LolaVoiceButton } from './LolaVoiceButton';
+import ChatMessageList from './ChatMessageList';
 
 const COMPOSER_HEIGHT = 92; // keep consistent with PvE
 
@@ -37,7 +38,7 @@ export default function RoomChat({
   currentUserName,
 }: RoomChatProps) {
   const [text, setText] = useState('');
-  const [mode, setMode] = useState<Mode>('m1');
+  const [mode, setMode] = useState<Mode>('m2');
   const [translateOptions, setTranslateOptions] = useState<string[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
 
@@ -121,41 +122,48 @@ export default function RoomChat({
         </View>
 
         {/* List */}
-        <View className="flex-1">
-          <FlatList
-            data={messages}
-            keyExtractor={(item, index) => `${roomId}-${index}`}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{
-              paddingBottom: isWeb ? COMPOSER_HEIGHT + 16 : 12,
-            }}
-            ListHeaderComponent={
-              translateOptions.length > 0 ? (
-                <View className="p-3 mb-3 rounded-2xl bg-amber-50 border border-amber-200">
-                  <Text className="font-semibold text-amber-900 mb-2">Choose a translation</Text>
-                  {translateOptions.map((opt) => (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => {
-                        setText(sanitizeVariant(opt));
-                        setTranslateOptions([]);
-                      }}
-                      className="px-3 py-2 rounded-xl bg-white border border-amber-100 mb-2"
-                      activeOpacity={0.85}
-                    >
-                      <Text className="text-gray-900">{opt}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : null
-            }
-            renderItem={({ item }) => {
+        <ChatMessageList<RoomChatMessage>
+          data={messages}
+          keyExtractor={(item, index) => `${roomId}-${index}`}
+          bottomPadding={isWeb ? COMPOSER_HEIGHT + 16 : 12}
+          overlayBottomOffset={isWeb ? COMPOSER_HEIGHT + 28 : 84}
+          header={
+            translateOptions.length > 0 ? (
+              <View className="p-3 mb-3 rounded-2xl bg-amber-50 border border-amber-200">
+                <Text className="font-semibold text-amber-900 mb-2">Choose a translation</Text>
+                {translateOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    onPress={() => {
+                      setText(sanitizeVariant(opt));
+                      setTranslateOptions([]);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-white border border-amber-100 mb-2"
+                    activeOpacity={0.85}
+                  >
+                    <Text className="text-gray-900">{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null
+          }
+          renderItem={({ item }) => {
               const isUser = Boolean(currentUserName && item.name === currentUserName);
+              const isLola = String(item.name || '').toLowerCase() === 'lola';
+
+              // Requested: in m2, only Lola responses should be renamed to
+              // "<currentUserName> | Translate". Don't rename other participants.
+              const displayName =
+                !isUser && mode === 'm2' && isLola
+                  ? `${currentUserName || 'Me'} | Translate`
+                  : item.name;
+
               return (
                 <ChatBubble
                   role={isUser ? 'user' : 'assistant'}
                   content={item.text}
-                  name={item.name}
+                  name={displayName}
+                  variant={!isUser && isLola ? 'lola' : 'default'}
                   footer={
                     !isUser && mode === 'm3' ? (
                       <LolaVoiceButton lolaReply={item.text} />
@@ -164,8 +172,7 @@ export default function RoomChat({
                 />
               );
             }}
-          />
-        </View>
+        />
 
         {/* Composer */}
         <View
@@ -179,7 +186,7 @@ export default function RoomChat({
                   backgroundColor: 'white',
                   borderTopWidth: 1,
                   borderTopColor: '#e5e7eb',
-                  paddingTop: 8,
+                  // paddingTop: 8,
                   paddingBottom: 16,
                   paddingLeft: 12,
                   paddingRight: 12,

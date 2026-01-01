@@ -30,10 +30,13 @@ export default function NavBar({
       >
         <Text
           className={[
-            'text-center text-base font-bold',
+            // Slightly smaller + allow shrink so long labels ("Talk to Friends") fit.
+            'text-center text-sm font-bold',
             active ? 'text-brand-600' : 'text-white',
           ].join(' ')}
           numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
         >
           {label}
         </Text>
