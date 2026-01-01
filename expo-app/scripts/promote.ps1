@@ -20,6 +20,10 @@ Write-Host "=== Promote to $Env ==="
 Ensure-CleanGit
 
 git checkout master
+aws s3 sync .\wegb-build\ s3://lola-pre --delete --region $region
+
+
+
 git merge developSIT
 git pull
 

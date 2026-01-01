@@ -4,7 +4,6 @@ import { sanitizeVariant } from '../lib/utils';
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
@@ -14,6 +13,7 @@ import { translateFirst, TranslateButton } from '../components/TranslateButton';
 import { LolaChatInput } from '../components/LolaChatInput';
 import ModeToggle from '../components/ModeToggle';
 import ChatBubble from '../components/ChatBubble';
+import ChatMessageList from '../components/ChatMessageList';
 
 const COMPOSER_HEIGHT = 92; // tweak if needed
 
@@ -47,49 +47,45 @@ export default function PvEScreen() {
         </View>
 
         {/* List */}
-        <View className="flex-1">
-          <FlatList
-            data={messages}
-            keyExtractor={(i, idx) => String(idx)}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{
-              paddingBottom: isWeb ? COMPOSER_HEIGHT + 16 : 12,
-            }}
-            ListHeaderComponent={
-              translateOptions.length > 0 ? (
-                <View className="p-3 mb-3 rounded-2xl bg-amber-50 border border-amber-200">
-                  <Text className="font-semibold text-amber-900 mb-2">
-                    Choose a translation
-                  </Text>
-                  {translateOptions.map((opt) => (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => {
-                        setText(sanitizeVariant(opt));
-                        setTranslateOptions([]);
-                      }}
-                      className="px-3 py-2 rounded-xl bg-white border border-amber-100 mb-2"
-                      activeOpacity={0.85}
-                    >
-                      <Text className="text-gray-900">{opt}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : null
-            }
-            renderItem={({ item }) => (
-              <ChatBubble
-                role={item?.role}
-                content={item?.content}
-                footer={
-                  item?.role === 'assistant' && mode === 'm3' ? (
-                    <LolaVoiceButton lolaReply={item?.content} />
-                  ) : null
-                }
-              />
-            )}
-          />
-        </View>
+        <ChatMessageList<any>
+          data={messages}
+          keyExtractor={(i, idx) => String(idx)}
+          bottomPadding={isWeb ? COMPOSER_HEIGHT + 16 : 12}
+          overlayBottomOffset={isWeb ? COMPOSER_HEIGHT + 28 : 84}
+          header={
+            translateOptions.length > 0 ? (
+              <View className="p-3 mb-3 rounded-2xl bg-amber-50 border border-amber-200">
+                <Text className="font-semibold text-amber-900 mb-2">
+                  Choose a translation
+                </Text>
+                {translateOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    onPress={() => {
+                      setText(sanitizeVariant(opt));
+                      setTranslateOptions([]);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-white border border-amber-100 mb-2"
+                    activeOpacity={0.85}
+                  >
+                    <Text className="text-gray-900">{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null
+          }
+          renderItem={({ item }) => (
+            <ChatBubble
+              role={item?.role}
+              content={item?.content}
+              footer={
+                item?.role === 'assistant' && mode === 'm3' ? (
+                  <LolaVoiceButton lolaReply={item?.content} />
+                ) : null
+              }
+            />
+          )}
+        />
 
         {/* Composer */}
         <View
