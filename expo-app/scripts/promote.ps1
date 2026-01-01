@@ -19,13 +19,18 @@ function Ensure-CleanGit {
 Write-Host "=== Promote to $Env ==="
 Ensure-CleanGit
 
+git fetch origin --prune
+
 git checkout master
-aws s3 sync .\web-build\ s3://lola-pre --delete --region $Region
+# Keep this early sync: publish the last successful local web build to a stable
+# preprod bucket before we do any new build work.
+aws s3 sync ".\$BuildDir\" "s3://lola-pre" --delete --region $Region
+# Ensure local master is up-to-date and avoid interactive prompts.
+git pull --ff-only origin master
 
-
-
-git merge developSIT
-git pull
+# Merge from origin to avoid merging a stale local developSIT branch.
+# --no-edit prevents Git from opening an editor for the merge commit message.
+git merge --no-edit origin/developSIT
 
 git checkout -b $Release
 
