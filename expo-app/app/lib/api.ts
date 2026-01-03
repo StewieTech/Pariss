@@ -1,5 +1,59 @@
 import client from './client';
+import { setDefaultHeader } from './client';
 import type { ChatMessage, PvpRoom } from '../types/chat';
+
+export type AppUser = {
+  id: string;
+  email: string;
+  profile: {
+    name?: string;
+    gender?: 'male' | 'female' | 'nonbinary' | 'prefer_not_to_say';
+    location?: string;
+    learningLanguage?: string;
+    photoUrl?: string;
+  };
+};
+
+export function setAuthToken(token?: string | null) {
+  if (!token) {
+    setDefaultHeader('Authorization', null);
+    return;
+  }
+  setDefaultHeader('Authorization', `Bearer ${token}`);
+}
+
+export async function register(email: string, password: string) {
+  const res = await client.post('/auth/register', { email, password });
+  return res.data as any;
+}
+
+export async function login(email: string, password: string) {
+  const res = await client.post('/auth/login', { email, password });
+  return res.data as any;
+}
+
+export async function getMe(): Promise<{ user: AppUser } | any> {
+  const res = await client.get('/me');
+  return res.data as any;
+}
+
+export async function updateProfile(patch: Partial<AppUser['profile']>) {
+  const res = await client.patch('/me/profile', patch);
+  return res.data as any;
+}
+
+export async function uploadProfilePhoto(uri: string) {
+  const fd = new FormData();
+  const filename = uri.split('/').pop() || 'profile.jpg';
+  const ext = (filename.split('.').pop() || 'jpg').toLowerCase();
+  const type = ext === 'png' ? 'image/png' : 'image/jpeg';
+
+  // React Native FormData expects { uri, name, type }
+  fd.append('photo', { uri, name: filename, type } as any);
+
+  const res = await client.post('/me/photo', fd);
+  return res.data as any;
+}
 
 export async function sendChatMessage(message: string, history: ChatMessage[] = []) {
   const res = await client.post('/chat/send', { message, history });

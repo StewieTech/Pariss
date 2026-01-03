@@ -11,7 +11,9 @@
     "expo": "~54.0.0",
     "expo-av": "^16.0.7",
     "expo-blur": "^15.0.7",
+    "expo-image-picker": "^17.0.10",
     "expo-linear-gradient": "^15.0.7",
+    "expo-secure-store": "^15.0.8",
     "expo-status-bar": "~1.6.0",
     "nativewind": "^4.2.1",
     "postcss": "^8.5.6",
@@ -30,13 +32,11 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-
     "promote:preprod": "powershell -ExecutionPolicy Bypass -File scripts/promote.ps1 -Env preprod",
     "promote:prod": "powershell -ExecutionPolicy Bypass -File scripts/promote.ps1 -Env prod",
     "sync:prod": "aws s3 sync .\\web-build\\ s3://lola-prod --delete --region ca-central-1",
-
-  "eas:web": "npx eas build --platform web",
-  "build:web": "expo export -p web --output-dir web-build",
+    "eas:web": "npx eas build --platform web",
+    "build:web": "expo export -p web --output-dir web-build",
     "smoke": "node ./scripts/smoketest.js",
     "export:web": "expo export:web",
     "export:web:prod": "cross-env EXPO_API_URL=https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws expo export:web"

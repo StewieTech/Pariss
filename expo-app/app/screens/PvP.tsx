@@ -16,6 +16,7 @@ import * as api from '../lib/api';
 import { sanitizeVariant } from '../lib/sanitize';
 import { API } from '../lib/config';
 import { translateFirst as translateFirstUtil } from '../components/TranslateButton';
+import { useAuth } from '../lib/auth';
 
 // Simple Tailwind-styled button
 type ButtonProps = {
@@ -56,6 +57,8 @@ type RoomSummary = {
 };
 
 export default function PvPScreen() {
+  const { user, hasProfileName } = useAuth();
+
   const [tab, setTab] = useState<'live' | 'create' | 'suggest'>('live');
   const [input, setInput] = useState('');
   const [joinInput, setJoinInput] = useState('');
@@ -138,9 +141,10 @@ export default function PvPScreen() {
 
   async function handleJoin(id?: string) {
     const roomId = id || createdRoom;
-    if (!roomId || !name) return;
+    const displayName = (hasProfileName ? user?.profile?.name : name)?.trim();
+    if (!roomId || !displayName) return;
     try {
-      await join(roomId, name);
+      await join(roomId, displayName);
       setCreatedRoom(roomId);
       await refreshRooms();
     } catch (e) {
@@ -148,16 +152,16 @@ export default function PvPScreen() {
     }
   }
 
-  async function handleSend(txt?: string) {
-    const t = txt || input;
-    if (!t) return;
-    try {
-      await postMessage(name || 'me', t);
-      setInput('');
-    } catch (e) {
-      console.error('post failed', e);
-    }
-  }
+  // async function handleSend(txt?: string) {
+  //   const t = txt || input;
+  //   if (!t) return;
+  //   try {
+  //     await postMessage(name || 'me', t);
+  //     setInput('');
+  //   } catch (e) {
+  //     console.error('post failed', e);
+  //   }
+  // }
 
   function parseRoomIdFromRaw(raw: string) {
     let id = raw;
@@ -178,7 +182,8 @@ export default function PvPScreen() {
   }
 
   async function handleJoinByRaw(raw: string) {
-    if (!name?.trim()) {
+    const displayName = (hasProfileName ? user?.profile?.name : name)?.trim();
+    if (!displayName) {
       Alert.alert('Missing name', 'Enter a display name before joining');
       return;
     }
@@ -214,27 +219,27 @@ export default function PvPScreen() {
     }
   }
 
-  async function handleTranslateFirst() {
-    if (!input) return;
-    try {
-      const r = await api.translateFirst(input);
-      const variants: string[] = r?.variants ?? [];
-      setTranslateOptionsRoom(variants.slice(0, 3));
-    } catch (e) {
-      console.error('translateFirst failed', e);
-    }
-  }
+  // async function handleTranslateFirst() {
+  //   if (!input) return;
+  //   try {
+  //     const r = await api.translateFirst(input);
+  //     const variants: string[] = r?.variants ?? [];
+  //     setTranslateOptionsRoom(variants.slice(0, 3));
+  //   } catch (e) {
+  //     console.error('translateFirst failed', e);
+  //   }
+  // }
 
-  async function handleAskLola() {
-    if (!input) return;
-    try {
-      const id = createdRoom || '';
-      const r = await suggestReplies(id, input);
-      if (r && r.length) setInput(r[0]);
-    } catch (e) {
-      console.error('suggest failed', e);
-    }
-  }
+  // async function handleAskLola() {
+  //   if (!input) return;
+  //   try {
+  //     const id = createdRoom || '';
+  //     const r = await suggestReplies(id, input);
+  //     if (r && r.length) setInput(r[0]);
+  //   } catch (e) {
+  //     console.error('suggest failed', e);
+  //   }
+  // }
 
   async function getSuggestions() {
     if (!input) return;
@@ -393,9 +398,10 @@ export default function PvPScreen() {
             />
             <TextInput
               className="border border-gray-300 rounded-md px-3 py-2"
-              placeholder="Your display name"
-              value={name}
-              onChangeText={setName}
+              placeholder={hasProfileName ? 'Using your profile name' : 'Your display name'}
+              value={hasProfileName ? (user?.profile?.name || '') : name}
+              onChangeText={hasProfileName ? undefined : setName}
+              editable={!hasProfileName}
             />
             <View className="flex-row mt-3">
               <TwButton
@@ -405,7 +411,7 @@ export default function PvPScreen() {
             </View>
           </View>
 
-          </View>
+      </View>
       )}
 
       {/* CREATE ROOM TAB */}
@@ -476,7 +482,8 @@ export default function PvPScreen() {
     messages={messages}
     setMessages={setMessages}
     onSend={async (t: string, opts) => {
-      await postMessage(name || 'me', t, opts);
+      const displayName = (hasProfileName ? user?.profile?.name : name)?.trim() || 'me';
+      await postMessage(displayName, t, opts);
     }}
     onLeave={() => {
       stopPolling();
@@ -484,7 +491,7 @@ export default function PvPScreen() {
       setShareLink(null);
       setInput('');
     }}
-    currentUserName={name || 'me'}
+    currentUserName={(hasProfileName ? user?.profile?.name : name) || 'me'}
   />
 )}
 

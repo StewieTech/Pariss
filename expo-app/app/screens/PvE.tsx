@@ -14,10 +14,13 @@ import { LolaChatInput } from '../components/LolaChatInput';
 import ModeToggle from '../components/ModeToggle';
 import ChatBubble from '../components/ChatBubble';
 import ChatMessageList from '../components/ChatMessageList';
+import { useAuth } from '../lib/auth';
 
 const COMPOSER_HEIGHT = 92; // tweak if needed
 
 export default function PvEScreen() {
+  const { user, hasProfileName } = useAuth();
+
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
   const sendRef = useRef<{ send?: () => void } | null>(null);
@@ -155,7 +158,20 @@ export default function PvEScreen() {
                 text={text}
                 setText={setText}
                 messages={messages}
-                setMessages={setMessages}
+                setMessages={(updater: any) => {
+                  // Keep existing SendButton behavior, but if it appends a user message,
+                  // we attach the profile name (used for future personalization/UI).
+                  setMessages((prev) => {
+                    const next = typeof updater === 'function' ? updater(prev) : updater;
+                    if (!Array.isArray(next)) return next;
+                    const out = [...next];
+                    const last = out[out.length - 1];
+                    if (last && last.role === 'user' && hasProfileName) {
+                      out[out.length - 1] = { ...last, name: user?.profile?.name };
+                    }
+                    return out;
+                  });
+                }}
                 mode={mode}
               />
             </View>
