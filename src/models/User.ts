@@ -23,8 +23,8 @@ const UserProfileSchema = new mongoose.Schema<IUserProfile>(
     name: { type: String, trim: true },
     gender: {
       type: String,
-      enum: ['male', 'female', 'nonbinary', 'prefer_not_to_say'],
-      default: 'prefer_not_to_say',
+      enum: ['male', 'female', 'other'],
+      default: 'other',
     },
     location: { type: String, trim: true },
     learningLanguage: { type: String, trim: true },

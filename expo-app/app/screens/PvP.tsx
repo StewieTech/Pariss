@@ -9,13 +9,10 @@ import {
   FlatList,
   Alert,
 } from 'react-native';
-import ChatBubble from '../components/ChatBubble';
 import RoomChat from '../components/RoomChat';
 import { usePvpRoom } from '../hooks/usePvpRoom';
 import * as api from '../lib/api';
-import { sanitizeVariant } from '../lib/sanitize';
 import { API } from '../lib/config';
-import { translateFirst as translateFirstUtil } from '../components/TranslateButton';
 import { useAuth } from '../lib/auth';
 
 // Simple Tailwind-styled button
@@ -76,7 +73,6 @@ export default function PvPScreen() {
     create,
     join,
     postMessage,
-  translateFirst,
     suggestReplies,
     stopPolling,
   } = usePvpRoom();
@@ -218,28 +214,6 @@ export default function PvPScreen() {
       }
     }
   }
-
-  // async function handleTranslateFirst() {
-  //   if (!input) return;
-  //   try {
-  //     const r = await api.translateFirst(input);
-  //     const variants: string[] = r?.variants ?? [];
-  //     setTranslateOptionsRoom(variants.slice(0, 3));
-  //   } catch (e) {
-  //     console.error('translateFirst failed', e);
-  //   }
-  // }
-
-  // async function handleAskLola() {
-  //   if (!input) return;
-  //   try {
-  //     const id = createdRoom || '';
-  //     const r = await suggestReplies(id, input);
-  //     if (r && r.length) setInput(r[0]);
-  //   } catch (e) {
-  //     console.error('suggest failed', e);
-  //   }
-  // }
 
   async function getSuggestions() {
     if (!input) return;
@@ -385,33 +359,35 @@ export default function PvPScreen() {
             )}
           </View>
 
-          {/* Join by link / id */}
-          <View className="mb-4">
-            <Text className="mb-2 text-gray-800">
-              Or paste an invite URL / room id to join:
-            </Text>
-            <TextInput
-              className="border border-gray-300 rounded-md px-3 py-2 mb-2"
-              placeholder="Paste link or room id"
-              value={joinInput}
-              onChangeText={setJoinInput}
-            />
-            <TextInput
-              className="border border-gray-300 rounded-md px-3 py-2"
-              placeholder={hasProfileName ? 'Using your profile name' : 'Your display name'}
-              value={hasProfileName ? (user?.profile?.name || '') : name}
-              onChangeText={hasProfileName ? undefined : setName}
-              editable={!hasProfileName}
-            />
-            <View className="flex-row mt-3">
-              <TwButton
-                title="Join by Link/ID"
-                onPress={() => handleJoinByRaw(joinInput)}
+          {/* Join by link / id (only show when not already in a room) */}
+          {!createdRoom ? (
+            <View className="mb-4">
+              <Text className="mb-2 text-gray-800">
+                Or paste an invite URL / room id to join:
+              </Text>
+              <TextInput
+                className="border border-gray-300 rounded-md px-3 py-2 mb-2"
+                placeholder="Paste link or room id"
+                value={joinInput}
+                onChangeText={setJoinInput}
               />
+              <TextInput
+                className="border border-gray-300 rounded-md px-3 py-2"
+                placeholder={hasProfileName ? 'Using your profile name' : 'Your display name'}
+                value={hasProfileName ? (user?.profile?.name || '') : name}
+                onChangeText={hasProfileName ? undefined : setName}
+                editable={!hasProfileName}
+              />
+              <View className="flex-row mt-3">
+                <TwButton
+                  title="Join by Link/ID"
+                  onPress={() => handleJoinByRaw(joinInput)}
+                />
+              </View>
             </View>
-          </View>
+          ) : null}
 
-      </View>
+        </View>
       )}
 
       {/* CREATE ROOM TAB */}
