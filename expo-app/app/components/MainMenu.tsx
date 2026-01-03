@@ -12,7 +12,7 @@ export default function MainMenu({ onChoose }: { onChoose: (s: any) => void }) {
       <View className="flex-1 items-center justify-center">
         <View className="w-full max-w-md">
           <Text className="text-2xl font-semibold text-white mb-1">
-            Practice Your Language With LolaInParis or With A Friend :)
+            Practice Your Language With LolaInParis or With Friends :)
           </Text>
 
           {isLoggedIn && hasProfileName ? (

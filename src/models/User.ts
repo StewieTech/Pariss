@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-export type Gender = 'male' | 'female' | 'nonbinary' | 'prefer_not_to_say';
+export type Gender = 'male' | 'female' | 'other' ;
 
 export interface IUserProfile {
   name?: string;
