@@ -115,6 +115,8 @@ aws ssm put-parameter --name "/lola/staging/MONGODB_URI" --value "$mongoUri" --t
 aws ssm put-parameter --name "/lola/prod/MONGODB_URI" --value "$mongoUri" --type SecureString --overwrite --region ca-central-1 --profile asklolaai
 aws ssm put-parameter --name "/lola/staging/MONGODB_DB" --value "paris_dev" --type String --overwrite --region ca-central-1 --profile asklolaai
 aws ssm put-parameter --name "/lola/prod/MONGODB_DB" --value "paris_dev" --type String --overwrite --region ca-central-1 --profile asklolaai
+aws ssm put-parameter --name "/lola/staging/JWT_SECRET" --value "fungoose" --type String --overwrite --region ca-central-1 --profile asklolaai
+aws ssm put-parameter --name "/lola/prod/JWT_SECRET" --value "fungoose" --type String --overwrite --region ca-central-1 --profile asklolaai
 
 # optional: set default voice id too (plain string)
 aws ssm put-parameter --name "/lola/staging/ELEVEN_VOICE_ID" --value "LEnmbrrxYsUYS7vsRRwD" --type String --overwrite --region ca-central-1 --profile asklolaai

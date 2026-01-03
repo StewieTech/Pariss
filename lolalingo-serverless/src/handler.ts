@@ -3,8 +3,12 @@ import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { handleChat } from '../../src/services/chat.service';
 import { postTranslate } from '../../src/controllers/chat.controller';
 import { createRoom, joinRoom, postMessage, getRoomState, suggestReplies, listRooms } from '../../src/controllers/pvp.controller';
+import { register, login } from '../../src/controllers/auth.controller';
+import { getMe, patchProfile } from '../../src/controllers/me.controller';
 import { synthesize } from '../../src/services/voice.service';
 import { ensureIndexes } from '../../src/lib/ensureIndexes';
+import { connectMongoose } from '../../src/lib/mongoose';
+import jwt from 'jsonwebtoken';
 
 
 type Req = {
@@ -63,6 +67,10 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
   try {
     // Best-effort: ensure indexes exist on cold start
     ensureIndexes().catch(() => {});
+
+    // Best-effort: connect mongoose on cold start so auth/profile endpoints work.
+    // (Mongoose relies on a long-lived connection; we cache the promise in connectMongoose.)
+    connectMongoose().catch(() => {});
 
     const method = event?.requestContext?.http?.method || "GET";
     const path = event?.rawPath || event?.requestContext?.http?.path || "/";
@@ -181,6 +189,7 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
         params: ({} as any),
         body: undefined,
             query: event.queryStringParameters || {},
+        headers: (event.headers || {}) as any,
         get: (h: string) => event.headers?.[h.toLowerCase()]
       };
       try { reqLike.body = event.body ? JSON.parse(event.body) : {}; } catch { reqLike.body = {}; }
@@ -192,6 +201,26 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
         reqLike._sub = pvpMatch[2] || '';
       }
 
+      // Minimal JWT auth (equivalent to requireAuth middleware)
+      try {
+        const h =
+          (event.headers?.authorization as any) ||
+          (event.headers?.Authorization as any) ||
+          '';
+        const m = /^Bearer\s+(.+)$/i.exec(String(h));
+        const token = m?.[1];
+        if (token) {
+          const secret = process.env.JWT_SECRET;
+          if (secret) {
+            const payload = jwt.verify(token, secret) as any;
+            const userId = String(payload?.sub || payload?.userId || '').trim();
+            if (userId) reqLike.userId = userId;
+          }
+        }
+      } catch {
+        // ignore here; protected controllers will respond 401 if userId missing
+      }
+
       const resLike: any = {
         status: (s: number) => ({ json: (d: any) => { out = { __status: s, body: d }; } }),
         json: (d: any) => { out = d; }
@@ -200,6 +229,40 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       await Promise.resolve(fn(reqLike, resLike));
       return out;
     }
+
+    // ===== Auth/Profile routes =====
+    if (path === '/auth/register' && method === 'POST') {
+      const out = await callController(register, event);
+      if (out && out.__status) return json(event, out.__status, out.body);
+      return json(event, 200, out ?? {});
+    }
+
+    if (path === '/auth/login' && method === 'POST') {
+      const out = await callController(login, event);
+      if (out && out.__status) return json(event, out.__status, out.body);
+      return json(event, 200, out ?? {});
+    }
+
+    if (path === '/me' && method === 'GET') {
+      const out = await callController(getMe, event);
+      if (out && out.__status) return json(event, out.__status, out.body);
+      return json(event, 200, out ?? {});
+    }
+
+    if (path === '/me/profile' && method === 'PATCH') {
+      const out = await callController(patchProfile, event);
+      if (out && out.__status) return json(event, out.__status, out.body);
+      return json(event, 200, out ?? {});
+    }
+
+    // Multipart file upload isn't supported in this handler yet (Function URL body handling + multipart parsing).
+    if (path === '/me/photo' && method === 'POST') {
+      return json(event, 501, {
+        error: 'not implemented in serverless handler',
+        message: 'Upload photo is not supported via Function URL yet. Use the Express server for /me/photo, or we can add multipart parsing here.'
+      });
+    }
+    // ==============================
 
     // /chat/translate
     if (path === '/chat/translate' && method === 'POST') {
