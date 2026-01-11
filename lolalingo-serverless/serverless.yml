@@ -31,6 +31,20 @@ functions:
   api:
     name: lola-${sls:stage}
     handler: dist/handler.http
-    url: true
+    url:
+      cors:
+        allowedOrigins:
+          - '*'
+        allowedMethods:
+          - GET
+          - POST
+          - PATCH
+          - PUT
+          - DELETE
+        allowedHeaders:
+          - Content-Type
+          - Authorization
+          - X-Requested-With
+          - xi-api-key
 
 
