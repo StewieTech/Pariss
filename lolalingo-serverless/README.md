@@ -54,6 +54,9 @@ npm run build
 # npx serverless deploy --region ca-central-1 --stage staging # I would of thought it was this one for sure
 npx serverless deploy --region ca-central-1
 npx serverless deploy --region ca-central-1 --stage dev --aws-profile asklolaai
+npx serverless deploy --region ca-central-1 --stage staging --aws-profile asklolaai
+npx serverless deploy --region ca-central-1 --stage prod --aws-profile asklolaai
+
 
 
 $env:EXPO_API_URL='https://<prod-function-url>'; expo export:web

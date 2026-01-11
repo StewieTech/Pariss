@@ -10,7 +10,6 @@ import { ensureIndexes } from '../../src/lib/ensureIndexes';
 import { connectMongoose } from '../../src/lib/mongoose';
 import jwt from 'jsonwebtoken';
 
-
 type Req = {
   rawPath?: string;
   rawQueryString?: string; 
@@ -20,10 +19,9 @@ type Req = {
   headers?: Record<string, string>;
 };
 
-
 const ssm = new SSMClient({});
 
-// small helper to make short traceable ids for logs
+// small helper to make short traceable ids for logss
 function shortId(prefix = '') {
   return prefix + Math.random().toString(36).slice(2, 9);
 }
@@ -68,10 +66,6 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
     // Best-effort: ensure indexes exist on cold start
     ensureIndexes().catch(() => {});
 
-    // Best-effort: connect mongoose on cold start so auth/profile endpoints work.
-    // (Mongoose relies on a long-lived connection; we cache the promise in connectMongoose.)
-    connectMongoose().catch(() => {});
-
     const method = event?.requestContext?.http?.method || "GET";
     const path = event?.rawPath || event?.requestContext?.http?.path || "/";
 
@@ -97,7 +91,8 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       // ignore; controllers will handle missing key
     }
 
-    // Ensure MongoDB env vars are available (once per cold start)
+    // Ensure MongoDB env vars are available (before connecting mongoose)
+    // so connectMongoose() doesn't throw "MONGODB_URI is not set".
     try {
       const envAlias = process.env.ENV_ALIAS || "staging";
 
@@ -113,6 +108,10 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
     } catch {
       // let controllers fail loudly if missing
     }
+
+    // IMPORTANT: Await Mongoose connection so User model is ready.
+    // With bufferCommands=false, queries will throw if we don't wait.
+    await connectMongoose();
 
     // Ensure ElevenLabs voice id is available (optional)
     try {
@@ -184,14 +183,28 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
 
     // Adapter to call existing Express-style controllers that use (req,res)
     async function callController(fn: any, event: Req) {
+      // This function is a thin adapter so we can reuse existing Express controllers
+      // inside a Lambda Function URL.
+      //
+      // Express controllers expect (req, res) objects. Lambda gives us an `event`.
+      // We build:
+      //  - `reqLike`: looks like Express's `req` (body/query/params/headers)
+      //  - `resLike`: looks like Express's `res` (status().json(), json())
+      // and capture whatever the controller "responds" with into `out`.
       let out: any = undefined;
       const reqLike: any = {
+        // Express-style params (used heavily by /pvp/:id routes)
         params: ({} as any),
+        // Will be filled by parsing event.body
         body: undefined,
+        // Express has req.query; Lambda gives queryStringParameters
             query: event.queryStringParameters || {},
+        // Expose headers in a shape controllers/middleware usually expect
         headers: (event.headers || {}) as any,
+        // Express has req.get('header-name')
         get: (h: string) => event.headers?.[h.toLowerCase()]
       };
+      // Parse JSON body (this adapter currently supports JSON requests only)
       try { reqLike.body = event.body ? JSON.parse(event.body) : {}; } catch { reqLike.body = {}; }
       // crude param extraction for /pvp/:id paths
       const pvpMatch = path.match(/^\/pvp\/(.+?)(?:\/|$)(.*)/);
@@ -203,17 +216,23 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
 
       // Minimal JWT auth (equivalent to requireAuth middleware)
       try {
+        // Read Authorization header: "Bearer <token>"
         const h =
           (event.headers?.authorization as any) ||
           (event.headers?.Authorization as any) ||
           '';
+        // Regex match returns an array; capture group 1 is the token
         const m = /^Bearer\s+(.+)$/i.exec(String(h));
         const token = m?.[1];
         if (token) {
+          // JWT_SECRET must exist in the Lambda environment for auth to work
           const secret = process.env.JWT_SECRET;
           if (secret) {
+            // verify() checks the signature + expiry; it does NOT just compare strings.
             const payload = jwt.verify(token, secret) as any;
+            // Standard JWT user identifier is `sub` (subject). We fall back to userId if present.
             const userId = String(payload?.sub || payload?.userId || '').trim();
+            // Our Express /me controllers check req.userId; attach it here
             if (userId) reqLike.userId = userId;
           }
         }
@@ -222,7 +241,10 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       }
 
       const resLike: any = {
+        // Express controllers often do: res.status(400).json({ ... })
+        // We capture both the status and the JSON body into `out`.
         status: (s: number) => ({ json: (d: any) => { out = { __status: s, body: d }; } }),
+        // Or: res.json({ ... }) which implies status 200
         json: (d: any) => { out = d; }
       };
 
