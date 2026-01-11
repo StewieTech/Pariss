@@ -38,6 +38,8 @@ export default function ChatMessageList<TItem>({
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [unseenCount, setUnseenCount] = useState(0);
   const lastCountRef = useRef(0);
+  const firstKeyRef = useRef<string | null>(null);
+  const didMountRef = useRef(false);
 
   function scrollToBottom() {
     setUnseenCount(0);
@@ -46,6 +48,26 @@ export default function ChatMessageList<TItem>({
       listRef.current?.scrollToEnd({ animated: true });
     });
   }
+
+  // When a list "identity" changes (e.g., switching rooms), reset counters so we treat
+  // it like a fresh chat and jump to the bottom once content is rendered.
+  useEffect(() => {
+    const nextFirstKey = Array.isArray(data) && data.length > 0 ? keyExtractor(data[0], 0) : null;
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      firstKeyRef.current = nextFirstKey;
+      return;
+    }
+
+    if (firstKeyRef.current !== nextFirstKey) {
+      firstKeyRef.current = nextFirstKey;
+      lastCountRef.current = 0;
+      setUnseenCount(0);
+      setIsAtBottom(true);
+      requestAnimationFrame(scrollToBottom);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyExtractor, data]);
 
   useEffect(() => {
     const prev = lastCountRef.current;

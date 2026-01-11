@@ -3,9 +3,12 @@ import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { handleChat } from '../../src/services/chat.service';
 import { postTranslate } from '../../src/controllers/chat.controller';
 import { createRoom, joinRoom, postMessage, getRoomState, suggestReplies, listRooms } from '../../src/controllers/pvp.controller';
+import { register, login } from '../../src/controllers/auth.controller';
+import { getMe, patchProfile } from '../../src/controllers/me.controller';
 import { synthesize } from '../../src/services/voice.service';
 import { ensureIndexes } from '../../src/lib/ensureIndexes';
-
+import { connectMongoose } from '../../src/lib/mongoose';
+import jwt from 'jsonwebtoken';
 
 type Req = {
   rawPath?: string;
@@ -16,10 +19,9 @@ type Req = {
   headers?: Record<string, string>;
 };
 
-
 const ssm = new SSMClient({});
 
-// small helper to make short traceable ids for logs
+// small helper to make short traceable ids for logss
 function shortId(prefix = '') {
   return prefix + Math.random().toString(36).slice(2, 9);
 }
@@ -89,21 +91,66 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       // ignore; controllers will handle missing key
     }
 
-    // Ensure MongoDB env vars are available (once per cold start)
+    // Ensure JWT_SECRET is available for auth routes
+    try {
+      const envAlias = process.env.ENV_ALIAS || 'staging';
+      if (!process.env.JWT_SECRET) {
+        const secret = await getParam(`/lola/${envAlias}/JWT_SECRET`, true);
+        if (secret) process.env.JWT_SECRET = secret;
+      }
+    } catch {
+      // auth routes will fail if missing
+    }
+
+    // Ensure MongoDB env vars are available (before connecting mongoose)
+    // so connectMongoose() doesn't throw "MONGODB_URI is not set".
     try {
       const envAlias = process.env.ENV_ALIAS || "staging";
+      log('debug', 'Loading MongoDB env vars from SSM', { envAlias });
 
       if (!process.env.MONGODB_URI) {
-        const uri = await getParam(`/lola/${envAlias}/MONGODB_URI`, true);
+        const ssmPath = `/lola/${envAlias}/MONGODB_URI`;
+        log('debug', 'Fetching MONGODB_URI from SSM', { ssmPath });
+        const uri = await getParam(ssmPath, true);
+        log('debug', 'SSM MONGODB_URI result', { 
+          ssmPath, 
+          found: !!uri, 
+          // Show first 30 chars only (don't log full connection string with password)
+          preview: uri ? uri.substring(0, 30) + '...' : '(empty)'
+        });
         if (uri) process.env.MONGODB_URI = uri;
+      } else {
+        log('debug', 'MONGODB_URI already set in env', { 
+          preview: process.env.MONGODB_URI.substring(0, 30) + '...' 
+        });
       }
 
       if (!process.env.MONGODB_DB) {
-        const db = await getParam(`/lola/${envAlias}/MONGODB_DB`, false);
+        const ssmPath = `/lola/${envAlias}/MONGODB_DB`;
+        const db = await getParam(ssmPath, false);
+        log('debug', 'SSM MONGODB_DB result', { ssmPath, found: !!db, value: db || '(empty)' });
         if (db) process.env.MONGODB_DB = db;
       }
-    } catch {
-      // let controllers fail loudly if missing
+    } catch (err: any) {
+      log('error', 'Failed to load MongoDB env vars from SSM', { err: String(err) });
+    }
+
+    // IMPORTANT: Await Mongoose connection so User model is ready.
+    // With bufferCommands=false, queries will throw if we don't wait.
+    log('debug', 'Connecting to Mongoose', { 
+      hasUri: !!process.env.MONGODB_URI,
+      dbName: process.env.MONGODB_DB || 'paris_dev'
+    });
+    try {
+      await connectMongoose();
+      log('debug', 'Mongoose connected successfully');
+    } catch (mongoErr: any) {
+      log('error', 'Mongoose connection failed', { 
+        err: String(mongoErr),
+        message: mongoErr?.message,
+        code: mongoErr?.code
+      });
+      throw mongoErr;
     }
 
     // Ensure ElevenLabs voice id is available (optional)
@@ -176,13 +223,28 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
 
     // Adapter to call existing Express-style controllers that use (req,res)
     async function callController(fn: any, event: Req) {
+      // This function is a thin adapter so we can reuse existing Express controllers
+      // inside a Lambda Function URL.
+      //
+      // Express controllers expect (req, res) objects. Lambda gives us an `event`.
+      // We build:
+      //  - `reqLike`: looks like Express's `req` (body/query/params/headers)
+      //  - `resLike`: looks like Express's `res` (status().json(), json())
+      // and capture whatever the controller "responds" with into `out`.
       let out: any = undefined;
       const reqLike: any = {
+        // Express-style params (used heavily by /pvp/:id routes)
         params: ({} as any),
+        // Will be filled by parsing event.body
         body: undefined,
+        // Express has req.query; Lambda gives queryStringParameters
             query: event.queryStringParameters || {},
+        // Expose headers in a shape controllers/middleware usually expect
+        headers: (event.headers || {}) as any,
+        // Express has req.get('header-name')
         get: (h: string) => event.headers?.[h.toLowerCase()]
       };
+      // Parse JSON body (this adapter currently supports JSON requests only)
       try { reqLike.body = event.body ? JSON.parse(event.body) : {}; } catch { reqLike.body = {}; }
       // crude param extraction for /pvp/:id paths
       const pvpMatch = path.match(/^\/pvp\/(.+?)(?:\/|$)(.*)/);
@@ -192,14 +254,77 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
         reqLike._sub = pvpMatch[2] || '';
       }
 
+      // Minimal JWT auth (equivalent to requireAuth middleware)
+      try {
+        // Read Authorization header: "Bearer <token>"
+        const h =
+          (event.headers?.authorization as any) ||
+          (event.headers?.Authorization as any) ||
+          '';
+        // Regex match returns an array; capture group 1 is the token
+        const m = /^Bearer\s+(.+)$/i.exec(String(h));
+        const token = m?.[1];
+        if (token) {
+          // JWT_SECRET must exist in the Lambda environment for auth to work
+          const secret = process.env.JWT_SECRET;
+          if (secret) {
+            // verify() checks the signature + expiry; it does NOT just compare strings.
+            const payload = jwt.verify(token, secret) as any;
+            // Standard JWT user identifier is `sub` (subject). We fall back to userId if present.
+            const userId = String(payload?.sub || payload?.userId || '').trim();
+            // Our Express /me controllers check req.userId; attach it here
+            if (userId) reqLike.userId = userId;
+          }
+        }
+      } catch {
+        // ignore here; protected controllers will respond 401 if userId missing
+      }
+
       const resLike: any = {
+        // Express controllers often do: res.status(400).json({ ... })
+        // We capture both the status and the JSON body into `out`.
         status: (s: number) => ({ json: (d: any) => { out = { __status: s, body: d }; } }),
+        // Or: res.json({ ... }) which implies status 200
         json: (d: any) => { out = d; }
       };
 
       await Promise.resolve(fn(reqLike, resLike));
       return out;
     }
+
+    // ===== Auth/Profile routes =====
+    if (path === '/auth/register' && method === 'POST') {
+      const out = await callController(register, event);
+      if (out && out.__status) return json(event, out.__status, out.body);
+      return json(event, 200, out ?? {});
+    }
+
+    if (path === '/auth/login' && method === 'POST') {
+      const out = await callController(login, event);
+      if (out && out.__status) return json(event, out.__status, out.body);
+      return json(event, 200, out ?? {});
+    }
+
+    if (path === '/me' && method === 'GET') {
+      const out = await callController(getMe, event);
+      if (out && out.__status) return json(event, out.__status, out.body);
+      return json(event, 200, out ?? {});
+    }
+
+    if (path === '/me/profile' && method === 'PATCH') {
+      const out = await callController(patchProfile, event);
+      if (out && out.__status) return json(event, out.__status, out.body);
+      return json(event, 200, out ?? {});
+    }
+
+    // Multipart file upload isn't supported in this handler yet (Function URL body handling + multipart parsing).
+    if (path === '/me/photo' && method === 'POST') {
+      return json(event, 501, {
+        error: 'not implemented in serverless handler',
+        message: 'Upload photo is not supported via Function URL yet. Use the Express server for /me/photo, or we can add multipart parsing here.'
+      });
+    }
+    // ==============================
 
     // /chat/translate
     if (path === '/chat/translate' && method === 'POST') {

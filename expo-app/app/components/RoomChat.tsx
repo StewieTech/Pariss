@@ -21,12 +21,12 @@ export type RoomChatProps = {
   participants: string[];
   messages: RoomChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<RoomChatMessage[]>>; // kept for future if you want optimistic updates
-  onSend: (text: string, opts: { includeLola: boolean; mode: 'm1' | 'm2' | 'm3' }) => Promise<void> | void;
+  onSend: (text: string, opts: { includeLola: boolean; mode: 'm0' | 'm1' | 'm2' | 'm3' }) => Promise<void> | void;
   onLeave: () => void;
   currentUserName?: string; // optional; lets us style "my" messages differently
 };
 
-type Mode = 'm1' | 'm2' | 'm3';
+type Mode = 'm0' | 'm1' | 'm2' | 'm3';
 
 export default function RoomChat({
   roomId,
@@ -105,6 +105,7 @@ export default function RoomChat({
             onChange={setMode}
             items={[
               // { label: 'm1: LolaChat', value: 'm1' },
+              { label: 'm0: None', value: 'm0' },
               { label: 'm1: LolaChat', value: 'm1' },
               { label: 'm2: TranslateOnly', value: 'm2' },
               { label: 'm3: $ LolaVoice', value: 'm3' },
