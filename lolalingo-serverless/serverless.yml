@@ -11,6 +11,15 @@ provider:
   environment:
     DDB_TABLE: lola_app
     ENV_ALIAS: ${sls:stage}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource:
+            - arn:aws:ssm:${aws:region}:${aws:accountId}:parameter/lola/*
 
 package:
   individually: false

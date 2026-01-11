@@ -91,27 +91,67 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       // ignore; controllers will handle missing key
     }
 
+    // Ensure JWT_SECRET is available for auth routes
+    try {
+      const envAlias = process.env.ENV_ALIAS || 'staging';
+      if (!process.env.JWT_SECRET) {
+        const secret = await getParam(`/lola/${envAlias}/JWT_SECRET`, true);
+        if (secret) process.env.JWT_SECRET = secret;
+      }
+    } catch {
+      // auth routes will fail if missing
+    }
+
     // Ensure MongoDB env vars are available (before connecting mongoose)
     // so connectMongoose() doesn't throw "MONGODB_URI is not set".
     try {
       const envAlias = process.env.ENV_ALIAS || "staging";
+      log('debug', 'Loading MongoDB env vars from SSM', { envAlias });
 
       if (!process.env.MONGODB_URI) {
-        const uri = await getParam(`/lola/${envAlias}/MONGODB_URI`, true);
+        const ssmPath = `/lola/${envAlias}/MONGODB_URI`;
+        log('debug', 'Fetching MONGODB_URI from SSM', { ssmPath });
+        const uri = await getParam(ssmPath, true);
+        log('debug', 'SSM MONGODB_URI result', { 
+          ssmPath, 
+          found: !!uri, 
+          // Show first 30 chars only (don't log full connection string with password)
+          preview: uri ? uri.substring(0, 30) + '...' : '(empty)'
+        });
         if (uri) process.env.MONGODB_URI = uri;
+      } else {
+        log('debug', 'MONGODB_URI already set in env', { 
+          preview: process.env.MONGODB_URI.substring(0, 30) + '...' 
+        });
       }
 
       if (!process.env.MONGODB_DB) {
-        const db = await getParam(`/lola/${envAlias}/MONGODB_DB`, false);
+        const ssmPath = `/lola/${envAlias}/MONGODB_DB`;
+        const db = await getParam(ssmPath, false);
+        log('debug', 'SSM MONGODB_DB result', { ssmPath, found: !!db, value: db || '(empty)' });
         if (db) process.env.MONGODB_DB = db;
       }
-    } catch {
-      // let controllers fail loudly if missing
+    } catch (err: any) {
+      log('error', 'Failed to load MongoDB env vars from SSM', { err: String(err) });
     }
 
     // IMPORTANT: Await Mongoose connection so User model is ready.
     // With bufferCommands=false, queries will throw if we don't wait.
-    await connectMongoose();
+    log('debug', 'Connecting to Mongoose', { 
+      hasUri: !!process.env.MONGODB_URI,
+      dbName: process.env.MONGODB_DB || 'paris_dev'
+    });
+    try {
+      await connectMongoose();
+      log('debug', 'Mongoose connected successfully');
+    } catch (mongoErr: any) {
+      log('error', 'Mongoose connection failed', { 
+        err: String(mongoErr),
+        message: mongoErr?.message,
+        code: mongoErr?.code
+      });
+      throw mongoErr;
+    }
 
     // Ensure ElevenLabs voice id is available (optional)
     try {

@@ -167,3 +167,7 @@ $cors = '{ "AllowOrigins": ["' + $origin + '"], "AllowMethods": ["GET","POST","O
 
 # Update (targeting the URL bound to the alias)
 aws lambda update-function-url-config --function-name $func --qualifier $alias --cors $cors --region $region
+
+
+# Logs Cloudwatch
+aws logs tail /aws/lambda/lola-prod --since 2m --format short --profile asklolaai --region ca-central-1
