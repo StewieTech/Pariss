@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 // import { SafeAreaView } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import PvPScreen from './app/screens/PvP';
@@ -12,22 +13,82 @@ import { AuthProvider } from './app/lib/auth';
 import AuthScreen from './app/screens/Auth';
 import ProfileScreen from './app/screens/Profile';
 
+type Screen = 'main' | 'pve' | 'pvp' | 'auth' | 'profile';
+type PveMode = 'm1' | 'm3';
+
+function getWebRouteState(): { screen: Screen; pveMode: PveMode } {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return { screen: 'main', pveMode: 'm1' };
+  }
+
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+
+  if (path === '/chat') return { screen: 'pve', pveMode: 'm1' };
+  if (path === '/voice') return { screen: 'pve', pveMode: 'm3' };
+  if (path === '/friends') return { screen: 'pvp', pveMode: 'm1' };
+  if (path === '/auth') return { screen: 'auth', pveMode: 'm1' };
+  if (path === '/profile') return { screen: 'profile', pveMode: 'm1' };
+
+  return { screen: 'main', pveMode: 'm1' };
+}
+
+function getPathForState(screen: Screen, pveMode: PveMode): string {
+  if (screen === 'pve') return pveMode === 'm3' ? '/voice' : '/chat';
+  if (screen === 'pvp') return '/friends';
+  if (screen === 'auth') return '/auth';
+  if (screen === 'profile') return '/profile';
+  return '/';
+}
+
 export default function App() {
-  const [screen, setScreen] = useState<'main'|'pve'|'pvp'|'auth'|'profile'>('main');
+  const initialRoute = getWebRouteState();
+  const [screen, setScreen] = useState<Screen>(initialRoute.screen);
+  const [pveMode, setPveMode] = useState<PveMode>(initialRoute.pveMode);
   // useEffect(() => {
   //   try { console.log('App: screen changed ->', screen); } catch(e){}
   // }, [screen]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const syncFromLocation = () => {
+      const next = getWebRouteState();
+      setScreen(next.screen);
+      setPveMode(next.pveMode);
+    };
+
+    window.addEventListener('popstate', syncFromLocation);
+    return () => window.removeEventListener('popstate', syncFromLocation);
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const nextPath = getPathForState(screen, pveMode);
+    const currentPath = window.location.pathname || '/';
+
+    if (currentPath !== nextPath) {
+      window.history.pushState({}, '', nextPath);
+    }
+  }, [screen, pveMode]);
+
+  const handleNav = (nextScreen: Screen) => {
+    setScreen(nextScreen);
+    if (nextScreen !== 'pve') return;
+    setPveMode('m1');
+  };
 
   return (
     <AuthProvider>
       <SafeAreaProvider>
         <SafeAreaView className="flex-1 bg-white">
-          <NavBar current={screen} onNav={setScreen} />
-          {screen === 'main' && <MainMenu onChoose={setScreen} />}
+          <NavBar current={screen} onNav={handleNav} />
+          {screen === 'main' && <MainMenu onChoose={handleNav} />}
           {screen === 'auth' && <AuthScreen onDone={() => setScreen('main')} />}
           {screen === 'profile' && <ProfileScreen onDone={() => setScreen('main')} />}
-          {screen === 'pve' && <PvEScreen />}
+          {screen === 'pve' && (
+            <PvEScreen mode={pveMode} onModeChange={setPveMode} />
+          )}
           {screen === 'pvp' && <PvPScreen />}
         </SafeAreaView>
       </SafeAreaProvider>

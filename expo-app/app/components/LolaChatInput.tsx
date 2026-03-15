@@ -7,6 +7,7 @@ export type LolaChatInputProps = {
   onChangeText: (text: string) => void;
   onSend: () => void;
   placeholder?: string;
+  placeholderTextColor?: string;
   inputStyle?: TextInputProps['style'];
 };
 
@@ -15,6 +16,7 @@ export function LolaChatInput({
   onChangeText,
   onSend,
   placeholder = 'Type...',
+  placeholderTextColor = '#9CA3AF',
   inputStyle,
 }: LolaChatInputProps) {
   // web-specific keyboard handler props (onKeyDown isn't part of RN TextInputProps types)
@@ -47,6 +49,7 @@ export function LolaChatInput({
       value={value}
       onChangeText={onChangeText}
       placeholder={placeholder}
+  placeholderTextColor={placeholderTextColor}
       multiline={true}
       blurOnSubmit={true}
       returnKeyType="send"

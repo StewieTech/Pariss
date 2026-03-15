@@ -18,17 +18,38 @@ import { useAuth } from '../lib/auth';
 
 const COMPOSER_HEIGHT = 92; // tweak if needed
 
-export default function PvEScreen() {
+type PveMode = 'm1' | 'm3';
+
+type PvEScreenProps = {
+  mode?: PveMode;
+  onModeChange?: (mode: PveMode) => void;
+};
+
+export default function PvEScreen({
+  mode: controlledMode,
+  onModeChange,
+}: PvEScreenProps) {
   const { user, hasProfileName } = useAuth();
 
   const [text, setText] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
   const sendRef = useRef<{ send?: () => void } | null>(null);
-  const [mode, setMode] = useState<'m1'|'m2'|'m3'>('m1');
+  const [internalMode, setInternalMode] = useState<PveMode>(controlledMode ?? 'm1');
   const [translateOptions, setTranslateOptions] = useState<string[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
 
   const isWeb = Platform.OS === 'web';
+  const mode = controlledMode ?? internalMode;
+
+  function handleModeChange(nextMode: PveMode) {
+    if (controlledMode == null) setInternalMode(nextMode);
+    onModeChange?.(nextMode);
+  }
+
+  function handleModeToggleChange(nextMode: 'm1' | 'm2' | 'm3') {
+    if (nextMode === 'm2') return;
+    handleModeChange(nextMode);
+  }
 
   return (
     <KeyboardAvoidingView
@@ -41,7 +62,7 @@ export default function PvEScreen() {
         <View className="mb-3 pt-2">
           <ModeToggle<'m1' | 'm2' | 'm3'>
             value={mode}
-            onChange={setMode}
+            onChange={handleModeToggleChange}
             items={[
               { label: 'm1: LolaChat', value: 'm1' },
               { label: 'm3: $ LolaVoice', value: 'm3' },
@@ -120,6 +141,7 @@ export default function PvEScreen() {
                   onChangeText={setText}
                   onSend={() => sendRef.current?.send?.()}
                   placeholder="Ask Lola Anything :)"
+                  placeholderTextColor="#9CA3AF"
                   inputStyle={{
                     borderWidth: 1,
                     borderColor: '#d1d5db',

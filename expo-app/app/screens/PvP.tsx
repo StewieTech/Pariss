@@ -81,6 +81,9 @@ export default function PvPScreen() {
     []
   );
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const displayName = (hasProfileName ? user?.profile?.name : name)?.trim() || '';
+  const needsDisplayName = !displayName;
+  const canJoinFromInvite = Boolean(displayName && joinInput.trim());
 
   function setRoomsFromBackend(payload: any) {
     const list = (payload?.rooms || []) as any[];
@@ -137,7 +140,6 @@ export default function PvPScreen() {
 
   async function handleJoin(id?: string) {
     const roomId = id || createdRoom;
-    const displayName = (hasProfileName ? user?.profile?.name : name)?.trim();
     if (!roomId || !displayName) return;
     try {
       await join(roomId, displayName);
@@ -178,9 +180,8 @@ export default function PvPScreen() {
   }
 
   async function handleJoinByRaw(raw: string) {
-    const displayName = (hasProfileName ? user?.profile?.name : name)?.trim();
     if (!displayName) {
-      Alert.alert('Missing name', 'Enter a display name before joining');
+      Alert.alert('Add your name first', 'Choose the name your friends will see before joining a room.');
       return;
     }
     const trimmed = (raw || '').trim();
@@ -293,10 +294,105 @@ export default function PvPScreen() {
       {/* LIVE TAB */}
       {tab === 'live' && (
         <View className="flex-1">
+          {!createdRoom && (
+            <View className="mb-5 rounded-3xl border border-violet-200 bg-violet-50 p-4">
+              <Text className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+                Before You Join
+              </Text>
+              <Text className="mt-2 text-xl font-semibold text-gray-900">
+                Pick the name your friends will see
+              </Text>
+              <Text className="mt-1 text-sm leading-5 text-gray-600">
+                This is the name shown in the room when you chat. Set it first, then paste your invite link.
+              </Text>
+
+              <View className="mt-4 rounded-2xl border border-violet-100 bg-white p-4 shadow-sm">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-violet-600">
+                  Step 1
+                </Text>
+                <Text className="mt-1 text-sm font-semibold text-gray-900">
+                  Your display name
+                </Text>
+                <Text className="mt-1 text-xs leading-5 text-gray-500">
+                  Keep it short and recognizable so your friend knows it is you.
+                </Text>
+
+                <TextInput
+                  className={`mt-3 rounded-2xl border px-4 py-3 text-base ${
+                    hasProfileName
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                      : 'border-violet-200 bg-violet-50/40 text-gray-900'
+                  }`}
+                  placeholder={hasProfileName ? 'Using your saved profile name' : 'Enter your display name'}
+                  placeholderTextColor={hasProfileName ? '#6b7280' : '#9ca3af'}
+                  value={hasProfileName ? (user?.profile?.name || '') : name}
+                  onChangeText={hasProfileName ? undefined : setName}
+                  editable={!hasProfileName}
+                />
+
+                <View
+                  className={`mt-3 rounded-2xl px-3 py-3 ${
+                    needsDisplayName
+                      ? 'border border-amber-200 bg-amber-50'
+                      : 'border border-emerald-200 bg-emerald-50'
+                  }`}
+                >
+                  <Text
+                    className={`text-sm font-medium ${
+                      needsDisplayName ? 'text-amber-900' : 'text-emerald-900'
+                    }`}
+                  >
+                    {needsDisplayName
+                      ? 'Add a display name to unlock room joining.'
+                      : `You will appear as "${displayName}".`}
+                  </Text>
+                </View>
+              </View>
+
+              <View className="mt-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-violet-600">
+                  Step 2
+                </Text>
+                <Text className="mt-1 text-sm font-semibold text-gray-900">
+                  Paste your invite link or room ID
+                </Text>
+                <Text className="mt-1 text-xs leading-5 text-gray-500">
+                  Example: `https://www.lolalingochat.com/pvp/room123` or just `room123`
+                </Text>
+
+                <TextInput
+                  className={`mt-3 rounded-2xl border px-4 py-3 text-base ${
+                    canJoinFromInvite
+                      ? 'border-violet-300 bg-white text-gray-900'
+                      : 'border-gray-200 bg-gray-50 text-gray-900'
+                  }`}
+                  placeholder="Paste link or room id"
+                  placeholderTextColor="#9ca3af"
+                  value={joinInput}
+                  onChangeText={setJoinInput}
+                />
+
+                <View className="mt-4 flex-row">
+                  <TwButton
+                    title={needsDisplayName ? 'Add Name To Continue' : 'Join Room'}
+                    onPress={() => handleJoinByRaw(joinInput)}
+                    disabled={!canJoinFromInvite}
+                    className={`flex-1 rounded-2xl py-3 ${
+                      canJoinFromInvite ? 'bg-violet-600' : 'bg-gray-200'
+                    }`}
+                  />
+                </View>
+              </View>
+            </View>
+          )}
+
           {/* Active rooms list */}
           <View className="mb-4">
             <Text className="text-base font-semibold text-gray-900 mb-2">
               Active Rooms
+            </Text>
+            <Text className="mb-3 text-sm text-gray-600">
+              Tap a room to auto-fill it, then join with the display name above.
             </Text>
 
             {rooms.length > 0 ? (
@@ -313,6 +409,13 @@ export default function PvPScreen() {
                       }`}
                       onPress={() => {
                         setJoinInput(room.id);
+                        if (needsDisplayName) {
+                          Alert.alert(
+                            'Choose your display name first',
+                            'Add the name you want your friend to see, then tap Join Room.'
+                          );
+                          return;
+                        }
                         handleJoin(room.id);
                       }}
                     >
@@ -358,35 +461,6 @@ export default function PvPScreen() {
               </TouchableOpacity>
             )}
           </View>
-
-          {/* Join by link / id (only show when not already in a room) */}
-          {!createdRoom ? (
-            <View className="mb-4">
-              <Text className="mb-2 text-gray-800">
-                Or paste an invite URL / room id to join:
-              </Text>
-              <TextInput
-                className="border border-gray-300 rounded-md px-3 py-2 mb-2"
-                placeholder="Paste link or room id"
-                value={joinInput}
-                onChangeText={setJoinInput}
-              />
-              <TextInput
-                className="border border-gray-300 rounded-md px-3 py-2"
-                placeholder={hasProfileName ? 'Using your profile name' : 'Your display name'}
-                value={hasProfileName ? (user?.profile?.name || '') : name}
-                onChangeText={hasProfileName ? undefined : setName}
-                editable={!hasProfileName}
-              />
-              <View className="flex-row mt-3">
-                <TwButton
-                  title="Join by Link/ID"
-                  onPress={() => handleJoinByRaw(joinInput)}
-                />
-              </View>
-            </View>
-          ) : null}
-
         </View>
       )}
 
