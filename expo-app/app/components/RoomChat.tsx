@@ -1,12 +1,15 @@
 // components/RoomChat.tsx
 import React, { useRef, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import { LolaChatInput } from './LolaChatInput';
 import { sanitizeVariant } from '../lib/sanitize';
 import { translateFirst, TranslateButton } from './TranslateButton';
 import ModeToggle from './ModeToggle';
 import ChatBubble from './ChatBubble';
 import { LolaVoiceButton } from './LolaVoiceButton';
+import ChatMessageList from './ChatMessageList';
+import LanguageSelector from './LanguageSelector';
+import type { AppLanguage } from '../lib/languages';
 
 const COMPOSER_HEIGHT = 92; // keep consistent with PvE
 
@@ -20,12 +23,23 @@ export type RoomChatProps = {
   participants: string[];
   messages: RoomChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<RoomChatMessage[]>>; // kept for future if you want optimistic updates
-  onSend: (text: string, opts: { includeLola: boolean; mode: 'm1' | 'm2' | 'm3' }) => Promise<void> | void;
+  onSend: (
+    text: string,
+    opts: {
+      includeLola: boolean;
+      mode: 'm1' | 'm2' | 'm3';
+      language: AppLanguage;
+      conversationId: string;
+    }
+  ) => Promise<void> | void;
   onLeave: () => void;
   currentUserName?: string; // optional; lets us style "my" messages differently
+  language: AppLanguage;
+  onLanguageChange: (language: AppLanguage) => void;
+  conversationId: string;
 };
 
-type Mode = 'm1' | 'm2' | 'm3';
+type Mode = 'm0' | 'm1' | 'm2' | 'm3';
 
 export default function RoomChat({
   roomId,
@@ -35,9 +49,12 @@ export default function RoomChat({
   onSend,
   onLeave,
   currentUserName,
+  language,
+  onLanguageChange,
+  conversationId,
 }: RoomChatProps) {
   const [text, setText] = useState('');
-  const [mode, setMode] = useState<Mode>('m1');
+  const [mode, setMode] = useState<Mode>('m2');
   const [translateOptions, setTranslateOptions] = useState<string[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
 
@@ -53,7 +70,7 @@ export default function RoomChat({
     setIsTranslating(true);
     setTranslateOptions([]);
     try {
-      const variants = await translateFirst(text);
+      const variants = await translateFirst(text, language);
       setTranslateOptions(variants.length ? variants.slice(0, 3) : ['(no variants)']);
     } catch (e) {
       console.error('translateFirst failed', e);
@@ -75,7 +92,11 @@ export default function RoomChat({
     sendingRef.current = true;
     setIsSending(true);
     try {
-      await Promise.resolve(onSend(t, { includeLola: true, mode }));
+      const includeLola = mode !== 'm0';
+      const backendMode = mode === 'm0' ? 'm1' : mode;
+      await Promise.resolve(
+        onSend(t, { includeLola, mode: backendMode, language, conversationId })
+      );
       setText('');
     } finally {
       if (cooldownRef.current) clearTimeout(cooldownRef.current);
@@ -99,11 +120,22 @@ export default function RoomChat({
             </Text>
           </View>
 
+          <View className="mt-3">
+            <LanguageSelector
+              language={language}
+              onChange={onLanguageChange}
+              title="Room language"
+              subtitle="Lola and the suggestion tools will follow this language."
+              compact
+            />
+          </View>
+
           <ModeToggle<Mode>
             value={mode}
             onChange={setMode}
             items={[
               // { label: 'm1: LolaChat', value: 'm1' },
+              { label: 'm0: None', value: 'm0' },
               { label: 'm1: LolaChat', value: 'm1' },
               { label: 'm2: TranslateOnly', value: 'm2' },
               { label: 'm3: $ LolaVoice', value: 'm3' },
@@ -121,41 +153,48 @@ export default function RoomChat({
         </View>
 
         {/* List */}
-        <View className="flex-1">
-          <FlatList
-            data={messages}
-            keyExtractor={(item, index) => `${roomId}-${index}`}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{
-              paddingBottom: isWeb ? COMPOSER_HEIGHT + 16 : 12,
-            }}
-            ListHeaderComponent={
-              translateOptions.length > 0 ? (
-                <View className="p-3 mb-3 rounded-2xl bg-amber-50 border border-amber-200">
-                  <Text className="font-semibold text-amber-900 mb-2">Choose a translation</Text>
-                  {translateOptions.map((opt) => (
-                    <TouchableOpacity
-                      key={opt}
-                      onPress={() => {
-                        setText(sanitizeVariant(opt));
-                        setTranslateOptions([]);
-                      }}
-                      className="px-3 py-2 rounded-xl bg-white border border-amber-100 mb-2"
-                      activeOpacity={0.85}
-                    >
-                      <Text className="text-gray-900">{opt}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ) : null
-            }
-            renderItem={({ item }) => {
+        <ChatMessageList<RoomChatMessage>
+          data={messages}
+          keyExtractor={(item, index) => `${roomId}-${index}`}
+          bottomPadding={isWeb ? COMPOSER_HEIGHT + 16 : 12}
+          overlayBottomOffset={isWeb ? COMPOSER_HEIGHT + 28 : 84}
+          header={
+            translateOptions.length > 0 ? (
+              <View className="p-3 mb-3 rounded-2xl bg-amber-50 border border-amber-200">
+                <Text className="font-semibold text-amber-900 mb-2">Choose a translation</Text>
+                {translateOptions.map((opt) => (
+                  <TouchableOpacity
+                    key={opt}
+                    onPress={() => {
+                      setText(sanitizeVariant(opt));
+                      setTranslateOptions([]);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-white border border-amber-100 mb-2"
+                    activeOpacity={0.85}
+                  >
+                    <Text className="text-gray-900">{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null
+          }
+          renderItem={({ item }) => {
               const isUser = Boolean(currentUserName && item.name === currentUserName);
+              const isLola = String(item.name || '').toLowerCase() === 'lola';
+
+              // Requested: in m2, only Lola responses should be renamed to
+              // "<currentUserName> | Translate". Don't rename other participants.
+              const displayName =
+                !isUser && mode === 'm2' && isLola
+                  ? `${currentUserName || 'Me'} | Translate`
+                  : item.name;
+
               return (
                 <ChatBubble
                   role={isUser ? 'user' : 'assistant'}
                   content={item.text}
-                  name={item.name}
+                  name={displayName}
+                  variant={!isUser && isLola ? 'lola' : 'default'}
                   footer={
                     !isUser && mode === 'm3' ? (
                       <LolaVoiceButton lolaReply={item.text} />
@@ -164,8 +203,7 @@ export default function RoomChat({
                 />
               );
             }}
-          />
-        </View>
+        />
 
         {/* Composer */}
         <View
@@ -179,7 +217,7 @@ export default function RoomChat({
                   backgroundColor: 'white',
                   borderTopWidth: 1,
                   borderTopColor: '#e5e7eb',
-                  paddingTop: 8,
+                  // paddingTop: 8,
                   paddingBottom: 16,
                   paddingLeft: 12,
                   paddingRight: 12,

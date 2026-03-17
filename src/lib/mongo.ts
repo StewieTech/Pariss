@@ -6,7 +6,7 @@ let clientPromise: Promise<MongoClient> | null = null;
 
 export async function getMongoClient(): Promise<MongoClient> {
   const uri = process.env.MONGODB_URI;
-  if (!uri) throw new Error('MONGODB_URI is not set');
+  if (!uri) throw new Error('MONGODB_URI is not sset');
 
   if (client) return client;
 

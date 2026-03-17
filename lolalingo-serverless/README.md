@@ -54,6 +54,9 @@ npm run build
 # npx serverless deploy --region ca-central-1 --stage staging # I would of thought it was this one for sure
 npx serverless deploy --region ca-central-1
 npx serverless deploy --region ca-central-1 --stage dev --aws-profile asklolaai
+npx serverless deploy --region ca-central-1 --stage staging --aws-profile asklolaai
+npx serverless deploy --region ca-central-1 --stage prod --aws-profile asklolaai
+
 
 
 $env:EXPO_API_URL='https://<prod-function-url>'; expo export:web
@@ -115,6 +118,8 @@ aws ssm put-parameter --name "/lola/staging/MONGODB_URI" --value "$mongoUri" --t
 aws ssm put-parameter --name "/lola/prod/MONGODB_URI" --value "$mongoUri" --type SecureString --overwrite --region ca-central-1 --profile asklolaai
 aws ssm put-parameter --name "/lola/staging/MONGODB_DB" --value "paris_dev" --type String --overwrite --region ca-central-1 --profile asklolaai
 aws ssm put-parameter --name "/lola/prod/MONGODB_DB" --value "paris_dev" --type String --overwrite --region ca-central-1 --profile asklolaai
+aws ssm put-parameter --name "/lola/staging/JWT_SECRET" --value "fungoose" --type String --overwrite --region ca-central-1 --profile asklolaai
+aws ssm put-parameter --name "/lola/prod/JWT_SECRET" --value "fungoose" --type String --overwrite --region ca-central-1 --profile asklolaai
 
 # optional: set default voice id too (plain string)
 aws ssm put-parameter --name "/lola/staging/ELEVEN_VOICE_ID" --value "LEnmbrrxYsUYS7vsRRwD" --type String --overwrite --region ca-central-1 --profile asklolaai
@@ -162,3 +167,7 @@ $cors = '{ "AllowOrigins": ["' + $origin + '"], "AllowMethods": ["GET","POST","O
 
 # Update (targeting the URL bound to the alias)
 aws lambda update-function-url-config --function-name $func --qualifier $alias --cors $cors --region $region
+
+
+# Logs Cloudwatch
+aws logs tail /aws/lambda/lola-prod --since 2m --format short --profile asklolaai --region ca-central-1

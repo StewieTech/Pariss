@@ -7,6 +7,10 @@
     "build": "esbuild src/handler.ts --bundle --platform=node --target=node20 --outfile=dist/handler.js",
     "build:cjs": "esbuild src/handler.ts --bundle --platform=node --format=cjs --target=node20 --outfile=dist/handler.cjs",
     "deploy": "npm run build && npx serverless deploy",
+    "deploy:staging": "npm run build && npx serverless deploy --stage staging --region ca-central-1 --aws-profile asklolaai",
+    "deploy:prod": "npm run build && npx serverless deploy --stage prod --region ca-central-1 --aws-profile asklolaai",
+    "deploy:staging:fast": "npx serverless deploy --stage staging --region ca-central-1 --aws-profile asklolaai",
+    "deploy:prod:fast": "npx serverless deploy --stage prod --region ca-central-1 --aws-profile asklolaai",
     "start": "node dist/handler.js",
     "test-local": "node test-local.js"
   },

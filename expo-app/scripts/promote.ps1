@@ -1,8 +1,8 @@
 param(
-  [Parameter(Mandatory=$true)][ValidateSet("preprod","prod")]$Env,
+  [Parameter(Mandatory=$true)][ValidateSet("pre","prod")]$Env,
   [string]$Region = "ca-central-1",
   [string]$Release = ("release/" + (Get-Date -Format "yyyyMMdd")),
-  [string]$BucketPreprod = "lola-preprod",
+  [string]$BucketPreprod = "lola-prep",
   [string]$BucketProd = "lola-prod",
   [string]$BuildDir = "web-build"
 )
@@ -19,9 +19,23 @@ function Ensure-CleanGit {
 Write-Host "=== Promote to $Env ==="
 Ensure-CleanGit
 
+Write-Host "Syncing $BuildDir -> s3://lola-frontend"
+cp .env.staging .env
+aws s3 sync .\web-build\ s3://lola-frontend --delete --region $Region
+git fetch origin --prune
+
 git checkout master
-git merge developSIT
-git pull
+# Keep this early sync: publish the last successful local web build to a stable
+# preprod bucket before we do any new build work.
+Write-Host "Syncing $BuildDir -> s3://lola-pre"
+cp .env.production .env
+aws s3 sync ".\$BuildDir\" "s3://lola-pre" --delete --region $Region
+# Ensure local master is up-to-date and avoid interactive prompts.
+git pull --ff-only origin master
+
+# Merge from origin to avoid merging a stale local developSIT branch.
+# --no-edit prevents Git from opening an editor for the merge commit message.
+git merge --no-edit origin/developSIT
 
 git checkout -b $Release
 

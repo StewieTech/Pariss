@@ -2,6 +2,7 @@ import { Text, TouchableOpacity } from 'react-native';
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import { API } from '../lib/config';
 import client from '../lib/client';
+import type { AppLanguage } from '../lib/languages';
 
 type Props = {
   text: string;
@@ -12,13 +13,15 @@ type Props = {
   onSend?: (text: string) => Promise<void> | void;
   // Optional mode for backend chat
   mode?: 'm1' | 'm2' | 'm3';
+  language?: AppLanguage;
+  conversationId?: string;
   disabled?: boolean;
   label?: string;
   className?: string;
 };
 
 const SendButton = forwardRef(function SendButton(
-  { text, setText, messages, setMessages, onSend, mode, disabled, label, className }: Props,
+  { text, setText, messages, setMessages, onSend, mode, language, conversationId, disabled, label, className }: Props,
   ref
 ) {
   const [isSending, setIsSending] = useState(false);
@@ -40,7 +43,12 @@ const SendButton = forwardRef(function SendButton(
       if (onSend) {
         await Promise.resolve(onSend(userMsg.content));
       } else {
-        const res = await client.post(`${API}/chat/send`, { text: userMsg.content, mode });
+        const res = await client.post(`${API}/chat/send`, {
+          text: userMsg.content,
+          mode,
+          language,
+          conversationId,
+        });
         const reply = res?.data?.reply ?? '';
         setMessages((prev: any[]) => [...prev, { role: 'assistant', content: reply }]);
       }
@@ -67,7 +75,7 @@ const SendButton = forwardRef(function SendButton(
   }
 
   // Expose send() so parent can trigger on Enter
-  useImperativeHandle(ref, () => ({ send: sendAction }), [text, disabled, mode, messages, isSending]);
+  useImperativeHandle(ref, () => ({ send: sendAction }), [text, disabled, mode, language, conversationId, messages, isSending]);
 
   const isDisabled = Boolean(disabled) || isSending || !text;
   const title = isSending ? 'Sending...' : label || 'Send';

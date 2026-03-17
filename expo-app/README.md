@@ -20,10 +20,12 @@ aws configure list
 aws sts get-caller-identity --profile asklolaai
 
 $env:AWS_PROFILE='asklolaai'
-$region='ca-central-1'
-$bucket='lola-prod'
+$Region='ca-central-1'
+$Bucket='lola-pre'
 
-$bucket='lola-frontend'
+$Bucket='lola-prod'
+
+$Bucket='lola-frontend'
 
 aws s3api create-bucket --bucket $bucket --region $region --create-bucket-configuration LocationConstraint=$region
 aws s3api put-public-access-block --bucket $bucket --public-access-block-configuration 'BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=False,RestrictPublicBuckets=true' --region $region
@@ -48,19 +50,18 @@ npx expo export -p web --output-dir web-build
 
 
 # sync to S3
-aws s3 sync .\web-build\ s3://lola-frontend --delete --region $region
-aws s3 sync .\web-build\ s3://lola-prod --delete --region $region
-aws s3 sync .\web-build\ s3://lola-pre --delete --region $region
+aws s3 sync .\web-build\ s3://lola-frontend --delete --region $Region
+aws s3 sync .\web-build\ s3://lola-prod --delete --region $Region
+aws s3 sync .\web-build\ s3://lola-pre --delete --region $Region
 
 
 # Setup Steps
-
-http://lola-pre.s3-website.ca-central-1.amazonaws.com
+ttp://lola-pre.s3-website.ca-central-1.amazonaws.com
 
 ## enable static website hosting (optional; S3 website has HTTP only)
-aws s3 website s3://lola-frontend --index-document index.html --error-document index.html
+<!-- aws s3 website s3://lola-frontend --index-document index.html --error-document index.html
 aws s3 website s3://lola-prod --index-document index.html --error-document index.html
-aws s3 website s3://lola-pre --index-document index.html --error-document index.html
+aws s3 website s3://lola-pre --index-document index.html --error-document index.html -->
 
 ## S3 website URL:
 Write-Output "http://$bucket.s3-website-$region.amazonaws.com"

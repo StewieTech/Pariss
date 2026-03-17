@@ -21,6 +21,13 @@ type Props = {
 
   /** Optional footer row (e.g. voice button). */
   footer?: React.ReactNode;
+
+  /**
+   * Optional style variant for assistant bubbles.
+   * - default: current PvE styling
+   * - lola: even subtler purple for Lola responses
+   */
+  variant?: 'default' | 'lola';
 };
 
 /**
@@ -28,19 +35,26 @@ type Props = {
  *
  * Default styling matches the bubbles in `PvE.tsx`.
  */
-export default function ChatBubble({ role, content, author, text, name, footer }: Props) {
+export default function ChatBubble({ role, content, author, text, name, footer, variant }: Props) {
   const resolvedRole: ChatBubbleRole =
     role ?? ((author === 'user' || author === 'me') ? 'user' : 'assistant');
   const resolvedText = content ?? text ?? '';
 
   const isUser = resolvedRole === 'user';
 
+  // If this bubble is an assistant bubble, allow callerj to opt into a subtler
+  // purple palette specifically for Lola responses.
+  const assistantClassName =
+    variant === 'lola'
+      ? 'bg-violet-50/40 border-violet-100/60'
+      : 'bg-violet-50 border-violet-200';
+
   return (
     <View
       className={`max-w-[85%] rounded-2xl px-3 py-2 mb-2 ${
         isUser
           ? 'self-end bg-violet-600'
-          : 'self-start bg-violet-50 border border-violet-100'
+          : `self-start border ${assistantClassName}`
       }`}
     >
       {name ? (
