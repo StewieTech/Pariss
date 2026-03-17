@@ -27,9 +27,9 @@ git fetch origin --prune
 git checkout master
 # Keep this early sync: publish the last successful local web build to a stable
 # preprod bucket before we do any new build work.
-Write-Host "Syncing $BuildDir -> s3://lola-pre"
+# Write-Host "Syncing $BuildDir -> s3://lola-pre"
 cp .env.production .env
-aws s3 sync ".\$BuildDir\" "s3://lola-pre" --delete --region $Region
+# aws s3 sync ".\$BuildDir\" "s3://lola-pre" --delete --region $Region
 # Ensure local master is up-to-date and avoid interactive prompts.
 git pull --ff-only origin master
 
