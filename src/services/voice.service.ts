@@ -1,7 +1,38 @@
-// Server-side voice service that calls ElevenLabs TTS and returns audio bytes.
-// This runs in Node (Lambda) and expects ELEVEN_API_KEY to be available in process.env.
-export async function synthesize(text: string, voiceId: string): Promise<{ buffer: Buffer; contentType: string }> {
-  if (!text) throw new Error('text required');
+import OpenAI from 'openai';
+
+export type TtsProvider = 'openai' | 'elevenlabs';
+
+type SynthResult = { buffer: Buffer; contentType: string };
+
+// --------------- OpenAI TTS (default — cheaper, lower latency) ---------------
+
+const DEFAULT_OPENAI_VOICE = 'nova';
+const DEFAULT_OPENAI_TTS_MODEL = 'tts-1';
+
+const VALID_OPENAI_VOICES = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral'] as const;
+
+async function synthesizeOpenAI(text: string, _voiceIdIgnored?: string): Promise<SynthResult> {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('OPENAI_API_KEY not set in environment');
+
+  const preferred = (process.env.OPENAI_TTS_VOICE || DEFAULT_OPENAI_VOICE).toLowerCase();
+  const voice = VALID_OPENAI_VOICES.includes(preferred as any) ? preferred : DEFAULT_OPENAI_VOICE;
+
+  const client = new OpenAI({ apiKey: key });
+  const response = await client.audio.speech.create({
+    model: process.env.OPENAI_TTS_MODEL || DEFAULT_OPENAI_TTS_MODEL,
+    voice: voice as any,
+    input: text,
+    response_format: 'mp3',
+  });
+
+  const ab = await response.arrayBuffer();
+  return { buffer: Buffer.from(ab), contentType: 'audio/mpeg' };
+}
+
+// --------------- ElevenLabs TTS (premium — richer voices) ---------------
+
+async function synthesizeElevenLabs(text: string, voiceId: string): Promise<SynthResult> {
   const apiKey = process.env.ELEVEN_API_KEY;
   if (!apiKey) throw new Error('ELEVEN_API_KEY not set in environment');
 
@@ -27,6 +58,21 @@ export async function synthesize(text: string, voiceId: string): Promise<{ buffe
   const buf = Buffer.from(ab);
   const contentType = resp.headers.get('content-type') || 'application/octet-stream';
   return { buffer: buf, contentType };
+}
+
+// --------------- Unified entry point ---------------
+
+export async function synthesize(
+  text: string,
+  voiceId: string,
+  provider: TtsProvider = 'openai'
+): Promise<SynthResult> {
+  if (!text) throw new Error('text required');
+
+  if (provider === 'elevenlabs') {
+    return synthesizeElevenLabs(text, voiceId);
+  }
+  return synthesizeOpenAI(text, voiceId);
 }
 
 export default { synthesize };

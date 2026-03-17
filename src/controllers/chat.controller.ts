@@ -3,15 +3,28 @@ import { z } from 'zod';
 import { handleChat } from '../services/chat.service';
 import { translateOnly } from '../services/translate.service';
 import { buildTranslatePrompt } from '../utils/prompt';
+import { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, normalizeLanguage } from '../utils/language';
 
-const SendMessageSchema = z.object({ text: z.string().min(1), mode: z.enum(['m1', 'm2', 'm3']) });
+const SupportedLanguageSchema = z.enum(SUPPORTED_LANGUAGES);
+
+const SendMessageSchema = z.object({
+  text: z.string().min(1),
+  mode: z.enum(['m1', 'm2', 'm3']),
+  language: SupportedLanguageSchema.optional().default(DEFAULT_LANGUAGE),
+  conversationId: z.string().min(1).optional(),
+});
 
 export async function postSend(req: Request, res: Response) {
   const parsed = SendMessageSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
   try {
-    const { text, mode } = parsed.data;
-    const result = await handleChat({ text, mode });
+    const { text, mode, language, conversationId } = parsed.data;
+    const result = await handleChat({
+      text,
+      mode,
+      language: normalizeLanguage(language),
+      conversationId,
+    });
     res.json(result);
   } catch (err: any) {
     console.error(err);
@@ -19,13 +32,16 @@ export async function postSend(req: Request, res: Response) {
   }
 }
 
-const TranslateSchema = z.object({ text: z.string().min(1) });
+const TranslateSchema = z.object({
+  text: z.string().min(1),
+  language: SupportedLanguageSchema.optional().default(DEFAULT_LANGUAGE),
+});
 
 export async function postTranslate(req: Request, res: Response) {
   const parsed = TranslateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.errors });
   try {
-  const prompt = buildTranslatePrompt(parsed.data.text);
+  const prompt = buildTranslatePrompt(parsed.data.text, normalizeLanguage(parsed.data.language));
   // Use an isolated translate service that does NOT include prior conversation history
   const result = await translateOnly({ prompt });
     // attempt to parse JSON array from reply

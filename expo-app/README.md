@@ -21,8 +21,9 @@ aws sts get-caller-identity --profile asklolaai
 
 $env:AWS_PROFILE='asklolaai'
 $Region='ca-central-1'
-$Bucket='lola-prod'
 $Bucket='lola-pre'
+
+$Bucket='lola-prod'
 
 $Bucket='lola-frontend'
 

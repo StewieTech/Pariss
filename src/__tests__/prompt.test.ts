@@ -1,11 +1,13 @@
-import { buildSystemMessages, MASTER_PROMPT } from '../utils/prompt';
+import { buildMasterPrompt, buildSystemMessages } from '../utils/prompt';
 
 describe('prompt utils', () => {
   it('builds system messages for each mode', () => {
-    const m1 = buildSystemMessages('m1');
-    const m2 = buildSystemMessages('m2');
-    const m3 = buildSystemMessages('m3');
+    const master = buildMasterPrompt('french');
+    const m1 = buildSystemMessages('m1', 'french');
+    const m2 = buildSystemMessages('m2', 'french');
+    const m3 = buildSystemMessages('m3', 'french');
 
+    expect(master).toContain('French tutor');
     expect(Array.isArray(m1)).toBe(true);
     expect(m1[0].content).toContain('Lola');
     expect(m2[1].content).toContain('Mode 2');

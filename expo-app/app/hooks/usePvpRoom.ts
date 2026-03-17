@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as api from '../lib/api';
 import type { PvpRoom } from '../types/chat';
+import type { AppLanguage } from '../lib/languages';
 
 type Msg = { name: string; text: string; ts: number };
 
@@ -130,7 +131,12 @@ export function usePvpRoom(initialRoomId?: string) {
   async function postMessageWithLola(
     author: string,
     text: string,
-    options?: { includeLola?: boolean; mode?: 'm1' | 'm2' | 'm3' }
+    options?: {
+      includeLola?: boolean;
+      mode?: 'm1' | 'm2' | 'm3';
+      language?: AppLanguage;
+      conversationId?: string;
+    }
   ) {
     const roomId = roomIdRef.current;
     if (!roomId) {
@@ -160,6 +166,8 @@ export function usePvpRoom(initialRoomId?: string) {
         includeLola: Boolean(options?.includeLola),
         mode: options?.mode,
         clientMessageId,
+        language: options?.language,
+        conversationId: options?.conversationId,
       });
 
       // If server returns the canonical message (recommended), reconcile.
@@ -227,13 +235,13 @@ export function usePvpRoom(initialRoomId?: string) {
     }
   }
 
-  async function translateFirst(text: string) {
-    const r = await api.translateFirst(text);
+  async function translateFirst(text: string, language?: AppLanguage) {
+    const r = await api.translateFirst(text, language);
     return r?.variants ?? [];
   }
 
-  async function suggestReplies(roomId: string, lastText: string) {
-    const r = await api.suggestReplies(roomId, lastText);
+  async function suggestReplies(roomId: string, lastText: string, language?: AppLanguage) {
+    const r = await api.suggestReplies(roomId, lastText, language);
     return r?.variants ?? [];
   }
 

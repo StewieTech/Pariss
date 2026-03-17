@@ -2,6 +2,7 @@
 import { Request, Response } from 'express';
 import { getDb } from '../lib/mongo';
 import { handleChat } from '../services/chat.service';
+import { DEFAULT_LANGUAGE, normalizeLanguage } from '../utils/language';
 
 // Suggest replies service
 import { getSuggestions as suggestService } from '../services/suggest.service';
@@ -12,6 +13,7 @@ type MessageDoc = {
   text: string;
   ts: number;
   clientMessageId?: string;
+  conversationId?: string;
 };
 
 type RoomDoc = {
@@ -156,6 +158,8 @@ export async function postMessage(req: Request, res: Response) {
   const includeLola = Boolean(req.body?.includeLola);
   const mode = (req.body?.mode as any) || 'm1';
   const clientMessageId = String(req.body?.clientMessageId || '').trim() || undefined;
+  const conversationId = String(req.body?.conversationId || '').trim() || undefined;
+  const language = normalizeLanguage(req.body?.language || DEFAULT_LANGUAGE);
 
   if (!author || !text) return res.status(400).json({ error: 'author/name and text required' });
 
@@ -176,7 +180,14 @@ export async function postMessage(req: Request, res: Response) {
     }
   }
 
-  const msg: MessageDoc = { roomId: id, author: author, text, ts: Date.now(), clientMessageId };
+  const msg: MessageDoc = {
+    roomId: id,
+    author: author,
+    text,
+    ts: Date.now(),
+    clientMessageId,
+    conversationId,
+  };
 
   await db.collection<MessageDoc>(MSGS).insertOne(msg);
 
@@ -213,7 +224,7 @@ export async function postMessage(req: Request, res: Response) {
       // Build short room history for Lola context (last 12 messages)
       const recent = await db
         .collection<MessageDoc>(MSGS)
-        .find({ roomId: id })
+        .find(conversationId ? { roomId: id, conversationId } : { roomId: id })
         .sort({ ts: -1 })
         .limit(12)
         .toArray();
@@ -227,7 +238,13 @@ export async function postMessage(req: Request, res: Response) {
       const lolaInput = `Room ${id} conversation so far:\n${contextLines}\n\nUser (${author}) just said: ${text}`;
 
       // Use room id as userId so message.repo history is room-scoped (simple, no schema change there)
-      const result = await handleChat({ userId: `room:${id}`, text: lolaInput, mode });
+      const result = await handleChat({
+        userId: `room:${id}`,
+        conversationId,
+        text: lolaInput,
+        mode,
+        language,
+      });
       const replyText = String(result?.reply || '').trim() || 'Sorry, no reply.';
 
       const lolaMsg: MessageDoc = {
@@ -235,6 +252,7 @@ export async function postMessage(req: Request, res: Response) {
         author: 'Lola',
         text: replyText,
         ts: Date.now(),
+        conversationId,
       };
 
       await db.collection<MessageDoc>(MSGS).insertOne(lolaMsg);
@@ -286,6 +304,7 @@ export async function getRoomState(req: Request, res: Response) {
 export async function suggestReplies(req: Request, res: Response) {
   const { id } = req.params;
   const text = String(req.body?.text || '').trim();
+  const language = normalizeLanguage(req.body?.language || DEFAULT_LANGUAGE);
   if (!text) return res.status(400).json({ error: 'text required' });
 
   const db = await getDb();
@@ -293,7 +312,7 @@ export async function suggestReplies(req: Request, res: Response) {
   if (!room) return res.status(404).json({ error: 'room not found' });
 
   try {
-    const result = await suggestService({ text });
+    const result = await suggestService({ text, language });
 
     let variants: string[] = [];
     try {

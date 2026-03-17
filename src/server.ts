@@ -19,7 +19,7 @@ const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 const app = express();
 app.use(helmet());
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Mongoose is only used for the User/profile model right now.
 // PvP rooms/messages continue to use the native MongoDB driver.

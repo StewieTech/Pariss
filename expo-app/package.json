@@ -11,6 +11,7 @@
     "expo": "~54.0.0",
     "expo-av": "^16.0.7",
     "expo-blur": "^15.0.7",
+    "expo-file-system": "~19.0.17",
     "expo-image-picker": "^17.0.10",
     "expo-linear-gradient": "^15.0.7",
     "expo-secure-store": "^15.0.8",
@@ -39,7 +40,7 @@
     "build:web": "expo export -p web --output-dir web-build",
     "smoke": "node ./scripts/smoketest.js",
     "export:web": "expo export:web",
-    "export:web:prod": "cross-env EXPO_API_URL=https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws expo export:web"
+    "export:web:prod": "cross-env EXPO_PUBLIC_API_URL=https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws expo export:web"
   },
   "devDependencies": {
     "@testing-library/jest-native": "^5.4.3",
