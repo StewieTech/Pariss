@@ -14,6 +14,8 @@ import { usePvpRoom } from '../hooks/usePvpRoom';
 import * as api from '../lib/api';
 import { API } from '../lib/config';
 import { useAuth } from '../lib/auth';
+import LanguageSelector from '../components/LanguageSelector';
+import { getLanguageMeta, type AppLanguage } from '../lib/languages';
 
 // Simple Tailwind-styled button
 type ButtonProps = {
@@ -53,7 +55,17 @@ type RoomSummary = {
   participants?: string[];
 };
 
-export default function PvPScreen() {
+type PvPScreenProps = {
+  language: AppLanguage;
+  onLanguageChange: (language: AppLanguage) => void;
+  conversationId: string;
+};
+
+export default function PvPScreen({
+  language,
+  onLanguageChange,
+  conversationId,
+}: PvPScreenProps) {
   const { user, hasProfileName } = useAuth();
 
   const [tab, setTab] = useState<'live' | 'create' | 'suggest'>('live');
@@ -219,7 +231,7 @@ export default function PvPScreen() {
   async function getSuggestions() {
     if (!input) return;
     try {
-      const r = await api.translateFirst(input);
+      const r = await api.translateFirst(input, language);
       const variants: string[] = r?.variants ?? [];
       setSuggestions(variants.slice(0, 3));
     } catch (e) {
@@ -230,8 +242,17 @@ export default function PvPScreen() {
   return (
     <View className="flex-1 bg-white p-3">
       <Text className="text-2xl font-semibold mb-3 text-violet-900">
-        Talk to Friends in French
+        Talk to Friends in {getLanguageMeta(language).label}
       </Text>
+
+      <View className="mb-4">
+        <LanguageSelector
+          language={language}
+          onChange={onLanguageChange}
+          title="Conversation language"
+          subtitle="Lola help, suggestions, and room practice all follow this language."
+        />
+      </View>
 
       {/* Tabs: Live | Create Room | Suggest Replies */}
       <View className="flex-row mb-3">
@@ -506,7 +527,7 @@ export default function PvPScreen() {
             className="border border-gray-300 rounded-md px-3 py-2"
             value={input}
             onChangeText={setInput}
-            placeholder="Paste French text here"
+            placeholder={`Paste ${getLanguageMeta(language).label} text here`}
           />
           <View className="flex-row mt-3">
             <TwButton title="Get Suggestions" onPress={getSuggestions} />
@@ -542,6 +563,9 @@ export default function PvPScreen() {
       setInput('');
     }}
     currentUserName={(hasProfileName ? user?.profile?.name : name) || 'me'}
+    language={language}
+    onLanguageChange={onLanguageChange}
+    conversationId={conversationId}
   />
 )}
 

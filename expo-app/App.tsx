@@ -12,6 +12,8 @@ import MainMenu from './app/components/MainMenu';
 import { AuthProvider } from './app/lib/auth';
 import AuthScreen from './app/screens/Auth';
 import ProfileScreen from './app/screens/Profile';
+import { DEFAULT_LANGUAGE, type AppLanguage } from './app/lib/languages';
+import { createConversationId } from './app/lib/conversation';
 
 type Screen = 'main' | 'pve' | 'pvp' | 'auth' | 'profile';
 type PveMode = 'm1' | 'm3';
@@ -44,6 +46,13 @@ export default function App() {
   const initialRoute = getWebRouteState();
   const [screen, setScreen] = useState<Screen>(initialRoute.screen);
   const [pveMode, setPveMode] = useState<PveMode>(initialRoute.pveMode);
+  const [language, setLanguage] = useState<AppLanguage>(DEFAULT_LANGUAGE);
+  const [chatConversationId, setChatConversationId] = useState(() =>
+    createConversationId('pve')
+  );
+  const [roomConversationId, setRoomConversationId] = useState(() =>
+    createConversationId('pvp')
+  );
   // useEffect(() => {
   //   try { console.log('App: screen changed ->', screen); } catch(e){}
   // }, [screen]);
@@ -78,6 +87,13 @@ export default function App() {
     setPveMode('m1');
   };
 
+  const handleLanguageChange = (nextLanguage: AppLanguage) => {
+    if (nextLanguage === language) return;
+    setLanguage(nextLanguage);
+    setChatConversationId(createConversationId('pve'));
+    setRoomConversationId(createConversationId('pvp'));
+  };
+
   return (
     <AuthProvider>
       <SafeAreaProvider>
@@ -87,9 +103,22 @@ export default function App() {
           {screen === 'auth' && <AuthScreen onDone={() => setScreen('main')} />}
           {screen === 'profile' && <ProfileScreen onDone={() => setScreen('main')} />}
           {screen === 'pve' && (
-            <PvEScreen mode={pveMode} onModeChange={setPveMode} />
+            <PvEScreen
+              key={chatConversationId}
+              mode={pveMode}
+              onModeChange={setPveMode}
+              language={language}
+              onLanguageChange={handleLanguageChange}
+              conversationId={chatConversationId}
+            />
           )}
-          {screen === 'pvp' && <PvPScreen />}
+          {screen === 'pvp' && (
+            <PvPScreen
+              language={language}
+              onLanguageChange={handleLanguageChange}
+              conversationId={roomConversationId}
+            />
+          )}
         </SafeAreaView>
       </SafeAreaProvider>
     </AuthProvider>

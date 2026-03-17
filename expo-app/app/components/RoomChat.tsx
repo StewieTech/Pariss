@@ -8,6 +8,8 @@ import ModeToggle from './ModeToggle';
 import ChatBubble from './ChatBubble';
 import { LolaVoiceButton } from './LolaVoiceButton';
 import ChatMessageList from './ChatMessageList';
+import LanguageSelector from './LanguageSelector';
+import type { AppLanguage } from '../lib/languages';
 
 const COMPOSER_HEIGHT = 92; // keep consistent with PvE
 
@@ -21,9 +23,20 @@ export type RoomChatProps = {
   participants: string[];
   messages: RoomChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<RoomChatMessage[]>>; // kept for future if you want optimistic updates
-  onSend: (text: string, opts: { includeLola: boolean; mode: 'm0' | 'm1' | 'm2' | 'm3' }) => Promise<void> | void;
+  onSend: (
+    text: string,
+    opts: {
+      includeLola: boolean;
+      mode: 'm1' | 'm2' | 'm3';
+      language: AppLanguage;
+      conversationId: string;
+    }
+  ) => Promise<void> | void;
   onLeave: () => void;
   currentUserName?: string; // optional; lets us style "my" messages differently
+  language: AppLanguage;
+  onLanguageChange: (language: AppLanguage) => void;
+  conversationId: string;
 };
 
 type Mode = 'm0' | 'm1' | 'm2' | 'm3';
@@ -36,6 +49,9 @@ export default function RoomChat({
   onSend,
   onLeave,
   currentUserName,
+  language,
+  onLanguageChange,
+  conversationId,
 }: RoomChatProps) {
   const [text, setText] = useState('');
   const [mode, setMode] = useState<Mode>('m2');
@@ -54,7 +70,7 @@ export default function RoomChat({
     setIsTranslating(true);
     setTranslateOptions([]);
     try {
-      const variants = await translateFirst(text);
+      const variants = await translateFirst(text, language);
       setTranslateOptions(variants.length ? variants.slice(0, 3) : ['(no variants)']);
     } catch (e) {
       console.error('translateFirst failed', e);
@@ -76,7 +92,11 @@ export default function RoomChat({
     sendingRef.current = true;
     setIsSending(true);
     try {
-      await Promise.resolve(onSend(t, { includeLola: true, mode }));
+      const includeLola = mode !== 'm0';
+      const backendMode = mode === 'm0' ? 'm1' : mode;
+      await Promise.resolve(
+        onSend(t, { includeLola, mode: backendMode, language, conversationId })
+      );
       setText('');
     } finally {
       if (cooldownRef.current) clearTimeout(cooldownRef.current);
@@ -98,6 +118,16 @@ export default function RoomChat({
             <Text className="text-sm text-gray-700">
               Participants: {Array.isArray(participants) ? participants.length : 0}
             </Text>
+          </View>
+
+          <View className="mt-3">
+            <LanguageSelector
+              language={language}
+              onChange={onLanguageChange}
+              title="Room language"
+              subtitle="Lola and the suggestion tools will follow this language."
+              compact
+            />
           </View>
 
           <ModeToggle<Mode>

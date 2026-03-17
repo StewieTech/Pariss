@@ -2,12 +2,14 @@ import type { APIGatewayProxyResult, Context } from 'aws-lambda';
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import { handleChat } from '../../src/services/chat.service';
 import { postTranslate } from '../../src/controllers/chat.controller';
+import { postVoiceTurn } from '../../src/controllers/voiceTurn.controller';
 import { createRoom, joinRoom, postMessage, getRoomState, suggestReplies, listRooms } from '../../src/controllers/pvp.controller';
 import { register, login } from '../../src/controllers/auth.controller';
 import { getMe, patchProfile } from '../../src/controllers/me.controller';
 import { synthesize } from '../../src/services/voice.service';
 import { ensureIndexes } from '../../src/lib/ensureIndexes';
 import { connectMongoose } from '../../src/lib/mongoose';
+import { DEFAULT_LANGUAGE, normalizeLanguage } from '../../src/utils/language';
 import jwt from 'jsonwebtoken';
 
 type Req = {
@@ -203,14 +205,41 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       try {
         const userText = (payload && (payload.text || payload.message || payload.input)) || '';
         const mode = payload?.mode || 'm1';
-        const userId = payload?.userId;
+        let userId = payload?.userId;
+        const conversationId = String(payload?.conversationId || '').trim() || undefined;
+        const language = normalizeLanguage(payload?.language || DEFAULT_LANGUAGE);
 
-        const result = await handleChat({ userId, text: String(userText), mode });
+        if (!userId) {
+          try {
+            const authHeader =
+              (event.headers?.authorization as any) ||
+              (event.headers?.Authorization as any) ||
+              '';
+            const match = /^Bearer\s+(.+)$/i.exec(String(authHeader));
+            const token = match?.[1];
+            if (token && process.env.JWT_SECRET) {
+              const decoded = jwt.verify(token, process.env.JWT_SECRET) as any;
+              userId = String(decoded?.sub || decoded?.userId || '').trim() || undefined;
+            }
+          } catch {
+            // Anonymous chat is allowed; we just skip history scoping when no token is present.
+          }
+        }
+
+        const result = await handleChat({
+          userId,
+          conversationId,
+          text: String(userText),
+          mode,
+          language,
+        });
 
         return json(event, 200, {
           reply: result.reply,
           tokens: result.tokens,
           received: payload,
+          selectedLanguage: language,
+          conversationId,
           envAlias,
           hasOpenAIKey: true
         });
@@ -356,6 +385,36 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
       }
     }
 
+    if (path === '/chat/voice-turn' && method === 'POST') {
+      try {
+        const envAlias = process.env.ENV_ALIAS || 'staging';
+        const elevenKey = await getParam(`/lola/${envAlias}/ELEVEN_API_KEY`, true);
+
+        if (!elevenKey) {
+          const errorId = shortId('e_ssm_');
+          log('error', 'ELEVEN key missing from SSM for voice-turn route', {
+            errorId,
+            envAlias,
+          });
+          return json(event, 200, {
+            error: 'ELEVEN key not found in SSM for this environment',
+            envAlias,
+            errorId,
+          });
+        }
+
+        process.env.ELEVEN_API_KEY = elevenKey;
+
+        const result = await callController(postVoiceTurn, event);
+        if (result && result.__status) return json(event, result.__status, result.body);
+        return json(event, 200, result ?? {});
+      } catch (err: any) {
+        const errorId = shortId('e_voice_turn_');
+        log('error', 'voice-turn route error', { errorId, err: String(err) });
+        return json(event, 500, { error: String(err), errorId });
+      }
+    }
+
     // /chat/tts -> returns binary audio (base64) from ElevenLabs
     if (path === '/chat/tts' && method === 'POST') {
       try {
@@ -363,22 +422,26 @@ export async function http(event: Req, _ctx: Context): Promise<APIGatewayProxyRe
         try { payload = event.body ? JSON.parse(event.body) : {}; } catch { payload = {}; }
         const text = String(payload?.text || payload?.input || '');
         const voiceId = String(payload?.voiceId || process.env.ELEVEN_VOICE_ID || '');
+        const ttsProvider = (payload?.ttsProvider === 'elevenlabs') ? 'elevenlabs' : 'openai';
 
         if (!text) return json(event, 400, { error: 'missing text in request body' });
 
         const envAlias = process.env.ENV_ALIAS || 'staging';
-        const keyPath = `/lola/${envAlias}/ELEVEN_API_KEY`;
-        const elevenKey = await getParam(keyPath, true);
-        if (!elevenKey) {
-          const errorId = shortId('e_ssm_');
-          log('error', 'ELEVEN key missing from SSM', { errorId, keyPath, envAlias });
-          return json(event, 200, { error: 'ELEVEN key not found in SSM for this environment', envAlias, errorId });
+
+        // ElevenLabs needs its own API key; OpenAI reuses OPENAI_API_KEY (already loaded above)
+        if (ttsProvider === 'elevenlabs') {
+          const keyPath = `/lola/${envAlias}/ELEVEN_API_KEY`;
+          const elevenKey = await getParam(keyPath, true);
+          if (!elevenKey) {
+            const errorId = shortId('e_ssm_');
+            log('error', 'ELEVEN key missing from SSM', { errorId, keyPath, envAlias });
+            return json(event, 200, { error: 'ELEVEN key not found in SSM for this environment', envAlias, errorId });
+          }
+          process.env.ELEVEN_API_KEY = elevenKey;
         }
 
-        process.env.ELEVEN_API_KEY = elevenKey;
-
         // call service
-        const out = await synthesize(text, voiceId || '');
+        const out = await synthesize(text, voiceId || '', ttsProvider as any);
         const bodyBase64 = out.buffer.toString('base64');
 
         // IMPORTANT:

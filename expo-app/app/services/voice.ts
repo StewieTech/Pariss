@@ -9,7 +9,150 @@ type VoiceCacheEntry = {
   contentType: string;
 };
 
+type ActivePlayback = {
+  stop: () => Promise<void>;
+  settle: (outcome: 'finished' | 'stopped' | 'error', error?: any) => void;
+};
+
 const voiceCache = new Map<string, VoiceCacheEntry>();
+let activePlayback: ActivePlayback | null = null;
+
+export async function stopPlayback(): Promise<void> {
+  const currentPlayback = activePlayback;
+  activePlayback = null;
+
+  if (!currentPlayback) return;
+
+  await currentPlayback.stop().catch(() => {});
+  currentPlayback.settle('stopped');
+}
+
+export async function playBase64Audio(
+  b64: string,
+  contentType = 'audio/mpeg'
+): Promise<void> {
+  if (!b64) return;
+
+  await stopPlayback();
+
+  if (Platform.OS === 'web') {
+    let binary: Uint8Array;
+    try {
+      binary = Uint8Array.from(atob(b64), (char) => char.charCodeAt(0));
+    } catch (err: any) {
+      throw new Error(
+        `TTS decode failed: invalid base64 returned by server (${String(
+          err?.message || err
+        )})`
+      );
+    }
+
+    const normalizedBinary = new Uint8Array(binary.length);
+    normalizedBinary.set(binary);
+    const blob = new Blob([normalizedBinary.buffer], {
+      type: contentType || 'audio/mpeg',
+    });
+    const objectUrl = URL.createObjectURL(blob);
+
+    await new Promise<void>((resolve, reject) => {
+      const audio = new (globalThis as any).Audio(objectUrl);
+      let settled = false;
+
+      const settle = (outcome: 'finished' | 'stopped' | 'error', error?: any) => {
+        if (settled) return;
+        settled = true;
+        if (activePlayback?.settle === settle) activePlayback = null;
+        if (outcome === 'error') reject(error);
+        else resolve();
+      };
+
+      const cleanup = () => {
+        URL.revokeObjectURL(objectUrl);
+        audio.removeEventListener('ended', onEnded);
+        audio.removeEventListener('error', onError);
+      };
+
+      const stop = async () => {
+        cleanup();
+        try {
+          audio.pause();
+          audio.currentTime = 0;
+        } catch {
+          // ignore playback cleanup issues
+        }
+      };
+
+      const onEnded = () => {
+        cleanup();
+        settle('finished');
+      };
+
+      const onError = (err: any) => {
+        cleanup();
+        settle('error', err);
+      };
+
+      activePlayback = { stop, settle };
+
+      audio.addEventListener('ended', onEnded);
+      audio.addEventListener('error', onError);
+
+      audio.play().catch((err: any) => {
+        cleanup();
+        settle('error', err);
+      });
+    });
+
+    return;
+  }
+
+  const sound = new Audio.Sound();
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+
+    const settle = (outcome: 'finished' | 'stopped' | 'error', error?: any) => {
+      if (settled) return;
+      settled = true;
+      if (activePlayback?.settle === settle) activePlayback = null;
+      if (outcome === 'error') reject(error);
+      else resolve();
+    };
+
+    const stop = async () => {
+      try {
+        await sound.stopAsync();
+      } catch {
+        // ignore
+      }
+      try {
+        await sound.unloadAsync();
+      } catch {
+        // ignore
+      }
+    };
+
+    activePlayback = { stop, settle };
+
+    sound.setOnPlaybackStatusUpdate((status: any) => {
+      if (!status?.isLoaded && status?.error) {
+        void stop().finally(() => settle('error', new Error(status.error)));
+        return;
+      }
+
+      if (status?.isLoaded && status?.didJustFinish) {
+        void stop().finally(() => settle('finished'));
+      }
+    });
+
+    sound
+      .loadAsync({ uri: `data:${contentType || 'audio/mpeg'};base64,${b64}` })
+      .then(() => sound.playAsync())
+      .catch((err) => {
+        void stop().finally(() => settle('error', err));
+      });
+  });
+}
 
 // Client-side TTS: call backend /chat/tts which proxies ElevenLabs.
 // Usage: await speakText('Bonjour', 'voiceId', optionalApiBase);
@@ -55,7 +198,10 @@ export async function speakText(
     }
 
     const b64 = await resp.text();
-    const contentType = resp.headers.get('content-type') || 'audio/mpeg';
+    const contentType =
+      resp.headers.get('x-audio-content-type') ||
+      resp.headers.get('content-type') ||
+      'audio/mpeg';
 
     // --- Credits / headers logging (only when we actually call TTS) ---
     try {
@@ -121,85 +267,7 @@ export async function speakText(
   }
 
   const { b64, contentType } = cached;
-
-  // --- Playback; this Promise resolves when playback finishes ---
-
-  if (Platform.OS === 'web') {
-    // Web: decode base64 to binary, create Blob and play via HTMLAudioElement,
-    // resolving only when playback ends.
-    let binary: Uint8Array;
-    try {
-      binary = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-    } catch (e: any) {
-      throw new Error(
-        `TTS decode failed: invalid base64 returned by server (${String(
-          e?.message || e
-        )})`
-      );
-    }
-
-    const blob = new Blob([binary], { type: contentType || 'audio/mpeg' });
-    const objectUrl = URL.createObjectURL(blob);
-
-    await new Promise<void>((resolve, reject) => {
-      const audio = new (globalThis as any).Audio(objectUrl);
-
-      const cleanup = () => {
-        URL.revokeObjectURL(objectUrl);
-        audio.removeEventListener('ended', onEnded);
-        audio.removeEventListener('error', onError);
-      };
-
-      const onEnded = () => {
-        cleanup();
-        resolve();
-      };
-
-      const onError = (err: any) => {
-        cleanup();
-        reject(err);
-      };
-
-      audio.addEventListener('ended', onEnded);
-      audio.addEventListener('error', onError);
-
-      audio
-        .play()
-        .catch((err: any) => {
-          cleanup();
-          reject(err);
-        });
-    });
-  } else {
-    // Native: use expo-av, and resolve when playback finishes.
-    const sound = new Audio.Sound();
-
-    await new Promise<void>((resolve, reject) => {
-      sound.setOnPlaybackStatusUpdate((status: any) => {
-        if (!status?.isLoaded && status?.error) {
-          sound
-            .unloadAsync()
-            .catch(() => {})
-            .finally(() => reject(new Error(status.error)));
-        } else if (status?.isLoaded && status?.didJustFinish) {
-          sound
-            .unloadAsync()
-            .catch(() => {})
-            .finally(() => resolve());
-        }
-      });
-
-      sound
-        .loadAsync({ uri: `data:audio/mpeg;base64,${b64}` })
-        .then(() => sound.playAsync())
-        .catch((err) => {
-          sound
-            .unloadAsync()
-            .catch(() => {})
-            .finally(() => reject(err));
-        });
-    });
-  }
+  await playBase64Audio(b64, contentType);
 }
 
-export default { speakText };
+export default { speakText, playBase64Audio, stopPlayback };

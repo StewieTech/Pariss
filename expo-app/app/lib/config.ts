@@ -1,7 +1,7 @@
 // expo-app/app/lib/config.ts
 import Constants from 'expo-constants';
 
-export const DEFAULT_LOCAL = 'http://192.168.2.44:4000';
+export const DEFAULT_LOCAL = 'http://localhost:4000';
 const DEFAULT_DEPLOYED = 'https://rtvfwmc7qd3p3shvzwb5pyliiy0fdvfo.lambda-url.ca-central-1.on.aws';
 
 // Read from expoConfig.extra (populated by app.config.js).
@@ -30,7 +30,7 @@ const isBrowserLocal = (() => {
 
 const trimmedEnvUrl = (envUrl || '').trim();
 
-export const API_BASE = trimmedEnvUrl || (isBrowserLocal ? DEFAULT_LOCAL : DEFAULT_DEPLOYED);
+export const API_BASE = isBrowserLocal ? DEFAULT_LOCAL : (trimmedEnvUrl || DEFAULT_DEPLOYED);
 export const API = API_BASE.replace(/\/$/, '');
 
 if (typeof console !== 'undefined') {
