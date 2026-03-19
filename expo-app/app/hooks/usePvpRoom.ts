@@ -104,6 +104,15 @@ export function usePvpRoom(initialRoomId?: string) {
       const sinceTs = lastTsRef.current || 0;
       const s = await api.getPvpRoom(id, sinceTs);
 
+      // Room expired (unused for 7+ days) — stop polling
+      if ((s as any)?.expired) {
+        stopPolling();
+        setMessages([]);
+        setParticipants([]);
+        setError('This room has expired (inactive for 7+ days).');
+        return;
+      }
+
       if ((s as any)?.participants) {
         setParticipants((s as any).participants || []);
       }

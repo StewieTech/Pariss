@@ -37,8 +37,24 @@ type RoomDoc = {
   createdAt: number;
   updatedAt: number;
   participants?: string[];
+  participantActivity?: Record<string, number>; // { name: lastActivityTs }
   displayName?: string;
 };
+
+// Participants inactive for >3 days are excluded from the list
+const PARTICIPANT_EXPIRY_MS = 3 * 24 * 60 * 60 * 1000;
+// Rooms not used for >7 days are hidden from listings
+const ROOM_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Return only participants active within the last 3 days */
+function getActiveParticipants(room: any): string[] {
+  const activity: Record<string, number> = (room as any)?.participantActivity || {};
+  const cutoff = Date.now() - PARTICIPANT_EXPIRY_MS;
+  const allNames: string[] = Array.isArray((room as any)?.participants) ? (room as any).participants : [];
+  // If activity map exists, use it for filtering; otherwise fall back to full list
+  if (Object.keys(activity).length === 0) return allNames;
+  return allNames.filter(name => (activity[name] || 0) >= cutoff);
+}
 
 function slugify(text: string): string {
   return text
@@ -105,8 +121,9 @@ export async function listRooms(req: Request, res: Response) {
     const limit = parseLimit(req);
     const sinceUpdatedAt = parseSinceUpdatedAt(req);
 
-    const query: any = {};
-    if (sinceUpdatedAt > 0) query.updatedAt = { $gt: sinceUpdatedAt };
+    const roomExpiryCutoff = Date.now() - ROOM_EXPIRY_MS;
+    const query: any = { updatedAt: { $gt: roomExpiryCutoff } };
+    if (sinceUpdatedAt > 0) query.updatedAt = { $gt: Math.max(sinceUpdatedAt, roomExpiryCutoff) };
 
     const rooms = await db
       .collection<RoomDoc>(ROOMS)
@@ -117,19 +134,18 @@ export async function listRooms(req: Request, res: Response) {
 
     return res.json({
       ok: true,
-      rooms: rooms.map((r) => ({
-        roomId: r._id,
-        displayName: (r as any).displayName || '',
-        createdAt: Number((r as any).createdAt || 0),
-        updatedAt: Number((r as any).updatedAt || 0),
-        participantCount: Array.isArray((r as any).participants)
-          ? ((r as any).participants as string[]).length
-          : 0,
-        participants: Array.isArray((r as any).participants)
-          ? (((r as any).participants as string[]).slice(0, 50))
-          : undefined,
-        joinPath: `/pvp/${r._id}`,
-      })),
+      rooms: rooms.map((r) => {
+        const active = getActiveParticipants(r);
+        return {
+          roomId: r._id,
+          displayName: (r as any).displayName || '',
+          createdAt: Number((r as any).createdAt || 0),
+          updatedAt: Number((r as any).updatedAt || 0),
+          participantCount: active.length,
+          participants: active.slice(0, 50),
+          joinPath: `/pvp/${r._id}`,
+        };
+      }),
     });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: String(err?.message || err) });
@@ -147,11 +163,12 @@ export async function joinRoom(req: Request, res: Response) {
   const room = await db.collection<RoomDoc>(ROOMS).findOne({ _id: id });
   if (!room) return res.status(404).json({ error: 'room not found' });
 
+  const joinNow = Date.now();
   await db.collection<RoomDoc>(ROOMS).updateOne(
     { _id: id },
     {
       $addToSet: { participants: author },
-      $set: { updatedAt: Date.now() },
+      $set: { updatedAt: joinNow, [`participantActivity.${author}`]: joinNow },
     }
   );
 
@@ -169,7 +186,7 @@ export async function joinRoom(req: Request, res: Response) {
     ok: true,
     roomId: id,
     displayName: (updatedRoom as any)?.displayName || '',
-    participants: ((updatedRoom as any)?.participants || []) as string[],
+    participants: getActiveParticipants(updatedRoom),
     messages: messages.map((m) => ({
       author: m.author, text: m.text, ts: m.ts,
       ...(m.type === 'voice' ? { type: 'voice', msgId: m.msgId, durationMs: m.durationMs } : {}),
@@ -225,11 +242,12 @@ export async function postMessage(req: Request, res: Response) {
   await db.collection<MessageDoc>(MSGS).insertOne(msg);
 
   // keep room updated + add participant if new
+  const msgNow = Date.now();
   await db.collection<RoomDoc>(ROOMS).updateOne(
     { _id: id },
     {
       $addToSet: { participants: author },
-      $set: { updatedAt: Date.now() },
+      $set: { updatedAt: msgNow, [`participantActivity.${author}`]: msgNow },
     }
   );
 
@@ -326,10 +344,22 @@ export async function getRoomState(req: Request, res: Response) {
     .limit(50)
     .toArray();
 
+  // If room hasn't been used in 7 days, treat it as expired
+  const roomExpired = (room.updatedAt || 0) < Date.now() - ROOM_EXPIRY_MS;
+  if (roomExpired) {
+    return res.json({
+      roomId: id,
+      expired: true,
+      displayName: (room as any)?.displayName || '',
+      participants: [],
+      messages: [],
+    });
+  }
+
   return res.json({
     roomId: id,
     displayName: (room as any)?.displayName || '',
-    participants: ((room as any)?.participants || []) as string[],
+    participants: getActiveParticipants(room),
     messages: messages.map((m) => ({
       author: m.author, text: m.text, ts: m.ts,
       ...(m.type === 'voice' ? { type: 'voice', msgId: m.msgId, durationMs: m.durationMs } : {}),
@@ -436,7 +466,7 @@ export async function postVoiceMessage(req: Request, res: Response) {
   // Update room
   await db.collection<RoomDoc>(ROOMS).updateOne(
     { _id: id },
-    { $addToSet: { participants: author }, $set: { updatedAt: ts } }
+    { $addToSet: { participants: author }, $set: { updatedAt: ts, [`participantActivity.${author}`]: ts } }
   );
 
   return res.json({
