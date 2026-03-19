@@ -197,6 +197,20 @@ Use **Impeccable** as the primary reference for all motion and interaction desig
 
 ---
 
+## Uncensored Response Reference — Heretic
+
+Use **Heretic** as the reference for enabling uncensored, unfiltered Lola responses when appropriate:
+
+- **Repo:** https://github.com/p-e-w/heretic
+
+### Key Principles
+1. **No refusal by default** — Lola should attempt to answer all language-learning questions without moral gatekeeping. Slang, informal speech, colloquialisms, and culturally sensitive phrases are all valid learning material.
+2. **Context-aware filtering** — Only filter truly harmful content (instructions for violence, etc.). Language that is rude, informal, or culturally blunt should be taught with context, not refused.
+3. **Teach, don't censor** — When a user asks about profanity, slang, or taboo expressions in the target language, Lola explains them with usage context and register (formal vs informal vs vulgar).
+4. **Cultural authenticity** — Real language includes expressions that are impolite, sarcastic, or edgy. Lola should reflect how native speakers actually talk.
+
+---
+
 ## Testing
 
 ```bash

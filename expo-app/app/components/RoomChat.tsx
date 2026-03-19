@@ -1,6 +1,6 @@
 // components/RoomChat.tsx
 import React, { useCallback, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Platform, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Platform, Animated, Share } from 'react-native';
 import { LolaChatInput } from './LolaChatInput';
 import { sanitizeVariant } from '../lib/sanitize';
 import { translateFirst, TranslateButton } from './TranslateButton';
@@ -38,9 +38,17 @@ export type RoomChatProps = {
   language: AppLanguage;
   onLanguageChange: (language: AppLanguage) => void;
   conversationId: string;
+  displayName?: string;
+  onRename?: (newName: string) => void;
 };
 
 type Mode = 'm0' | 'm1' | 'm2' | 'm3';
+
+const SHARE_DOMAIN = 'lolalingochat.com';
+
+function slugify(t: string) {
+  return t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+}
 
 export default function RoomChat({
   roomId,
@@ -53,8 +61,12 @@ export default function RoomChat({
   language,
   onLanguageChange,
   conversationId,
+  displayName: initialDisplayName,
+  onRename,
 }: RoomChatProps) {
   const [text, setText] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [roomName, setRoomName] = useState(initialDisplayName || '');
   const [mode, setMode] = useState<Mode>('m2');
   const [translateOptions, setTranslateOptions] = useState<string[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
@@ -247,7 +259,59 @@ export default function RoomChat({
         {/* Header */}
         <View className="mb-3 pt-2">
           <View className="flex-row items-center justify-between">
-            <Text className="text-lg font-semibold text-gray-900">Room {roomId}</Text>
+            {/* Editable room name */}
+            <View className="flex-1 mr-2">
+              {editingName ? (
+                <TextInput
+                  autoFocus
+                  value={roomName}
+                  onChangeText={setRoomName}
+                  onBlur={() => {
+                    setEditingName(false);
+                    if (roomName.trim() && onRename) onRename(roomName.trim());
+                  }}
+                  onSubmitEditing={() => {
+                    setEditingName(false);
+                    if (roomName.trim() && onRename) onRename(roomName.trim());
+                  }}
+                  placeholder="Name this room…"
+                  placeholderTextColor="#9CA3AF"
+                  className="text-lg font-semibold text-gray-900 border-b border-violet-300 pb-1"
+                  maxLength={80}
+                />
+              ) : (
+                <TouchableOpacity onPress={() => setEditingName(true)} activeOpacity={0.7}>
+                  <Text className="text-lg font-semibold text-gray-900">
+                    {roomName || `Room ${roomId}`}
+                  </Text>
+                  <Text className="text-xs text-gray-400">Tap to rename</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Share link */}
+              {roomName.trim() ? (
+                <TouchableOpacity
+                  onPress={async () => {
+                    const url = `https://${SHARE_DOMAIN}/${roomId}/${slugify(roomName)}`;
+                    if (Platform.OS === 'web') {
+                      try {
+                        await (navigator as any).clipboard?.writeText(url);
+                        alert('Link copied!');
+                      } catch { window.prompt('Copy link', url); }
+                    } else {
+                      Share.share({ message: url });
+                    }
+                  }}
+                  className="mt-1"
+                  activeOpacity={0.7}
+                >
+                  <Text className="text-xs text-violet-600">
+                    🔗 {SHARE_DOMAIN}/{roomId}/{slugify(roomName)}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
             <TouchableOpacity
               onPress={() => setShowParticipants((p) => !p)}
               className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border border-violet-200 bg-violet-50"

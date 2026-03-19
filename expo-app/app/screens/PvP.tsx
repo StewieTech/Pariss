@@ -74,6 +74,7 @@ export default function PvPScreen({
   const [name, setName] = useState('');
   const [createdRoom, setCreatedRoom] = useState<string | null>(null);
   const [shareLink, setShareLink] = useState<string | null>(null);
+  const [roomDisplayName, setRoomDisplayName] = useState('');
 
   // New: track all rooms we've created or joined
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
@@ -154,8 +155,10 @@ export default function PvPScreen({
     const roomId = id || createdRoom;
     if (!roomId || !displayName) return;
     try {
-      await join(roomId, displayName);
+      const res = await join(roomId, displayName);
       setCreatedRoom(roomId);
+      // Load room displayName if it exists
+      if ((res as any)?.displayName) setRoomDisplayName((res as any).displayName);
       await refreshRooms();
     } catch (e) {
       console.error('join failed', e);
@@ -553,19 +556,29 @@ export default function PvPScreen({
     messages={messages}
     setMessages={setMessages}
     onSend={async (t: string, opts) => {
-      const displayName = (hasProfileName ? user?.profile?.name : name)?.trim() || 'me';
-      await postMessage(displayName, t, opts);
+      const dn = (hasProfileName ? user?.profile?.name : name)?.trim() || 'me';
+      await postMessage(dn, t, opts);
     }}
     onLeave={() => {
       stopPolling();
       setCreatedRoom(null);
       setShareLink(null);
       setInput('');
+      setRoomDisplayName('');
     }}
     currentUserName={(hasProfileName ? user?.profile?.name : name) || 'me'}
     language={language}
     onLanguageChange={onLanguageChange}
     conversationId={conversationId}
+    displayName={roomDisplayName}
+    onRename={async (newName) => {
+      setRoomDisplayName(newName);
+      try {
+        await api.renamePvpRoom(createdRoom!, newName);
+      } catch (e) {
+        console.warn('rename failed', e);
+      }
+    }}
   />
 )}
 
