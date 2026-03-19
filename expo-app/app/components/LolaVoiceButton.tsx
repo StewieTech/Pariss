@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
-import { speakText, playBase64Audio } from '../services/voice';
+import { playBase64Audio } from '../services/voice';
+import { API } from '../lib/config';
 
 const SPEED_OPTIONS = [
   { label: '1x', value: 1.0 },
@@ -26,6 +27,7 @@ export function LolaVoiceButton({
   const [hasPlayed, setHasPlayed] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cachedAudio, setCachedAudio] = useState<{ b64: string; contentType: string } | null>(null);
 
   const play = useCallback(
     async (rate: number = 1.0) => {
@@ -35,15 +37,26 @@ export function LolaVoiceButton({
       setIsBusy(true);
 
       try {
-        if (audioBase64) {
-          await playBase64Audio(
-            audioBase64,
-            audioContentType || 'audio/mpeg',
-            rate
-          );
-        } else {
-          await speakText(lolaReply, voiceId);
+        // Use prop audio, local cache, or fetch from TTS backend
+        let audio = audioBase64
+          ? { b64: audioBase64, contentType: audioContentType || 'audio/mpeg' }
+          : cachedAudio;
+
+        if (!audio) {
+          // Fetch TTS audio from backend and cache locally
+          const resp = await fetch(`${API}/chat/tts`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text: lolaReply, voiceId }),
+          });
+          if (!resp.ok) throw new Error(`TTS failed (${resp.status})`);
+          const b64 = await resp.text();
+          const ct = resp.headers.get('x-audio-content-type') || 'audio/mpeg';
+          audio = { b64, contentType: ct };
+          setCachedAudio(audio);
         }
+
+        await playBase64Audio(audio.b64, audio.contentType, rate);
         setHasPlayed(true);
       } catch (e: any) {
         console.error('Lola TTS error', e);
@@ -52,7 +65,7 @@ export function LolaVoiceButton({
         setIsBusy(false);
       }
     },
-    [isBusy, lolaReply, voiceId, audioBase64, audioContentType]
+    [isBusy, lolaReply, voiceId, audioBase64, audioContentType, cachedAudio]
   );
 
   const label = isBusy
@@ -74,8 +87,8 @@ export function LolaVoiceButton({
         <Text className="text-white font-semibold text-sm">{label}</Text>
       </TouchableOpacity>
 
-      {/* Speed replay row — always visible when cached audio available */}
-      {!isBusy && audioBase64 && (
+      {/* Speed replay row — visible when audio is cached (prop or fetched) */}
+      {!isBusy && (audioBase64 || cachedAudio) && (
         <View className="flex-row items-center gap-1.5">
           <Text className="text-xs text-gray-400 mr-1">Speed:</Text>
           {SPEED_OPTIONS.map((opt) => (

@@ -236,11 +236,23 @@ export async function listPvpRooms(limit?: number, sinceUpdatedAt?: number) {
     ok: boolean;
     rooms: Array<{
       roomId: string;
+      displayName?: string;
       createdAt: number;
       updatedAt: number;
       participantCount: number;
       participants?: string[];
       joinPath: string;
     }>;
+  };
+}
+
+export async function renamePvpRoom(roomId: string, displayName: string) {
+  const res = await client.patch(`/pvp/${roomId}/rename`, { displayName });
+  return res.data as {
+    ok: boolean;
+    roomId: string;
+    displayName: string;
+    slug: string;
+    shareUrl: string;
   };
 }

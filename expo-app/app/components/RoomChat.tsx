@@ -70,6 +70,7 @@ export default function RoomChat({
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(false);
   const [replyTarget, setReplyTarget] = useState<string | null>(null);
   const [reviewInstruction, setReviewInstruction] = useState<string | null>(null);
+  const [showParticipants, setShowParticipants] = useState(false);
   const [reviewedMsgIds, setReviewedMsgIds] = useState<Set<string>>(new Set());
   const nudgeFade = useRef(new Animated.Value(0)).current;
   const textSendCountRef = useRef(0);
@@ -247,10 +248,42 @@ export default function RoomChat({
         <View className="mb-3 pt-2">
           <View className="flex-row items-center justify-between">
             <Text className="text-lg font-semibold text-gray-900">Room {roomId}</Text>
-            <Text className="text-sm text-gray-700">
-              Participants: {Array.isArray(participants) ? participants.length : 0}
-            </Text>
+            <TouchableOpacity
+              onPress={() => setShowParticipants((p) => !p)}
+              className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border border-violet-200 bg-violet-50"
+              activeOpacity={0.8}
+            >
+              <Text className="text-sm font-semibold text-violet-700">
+                Participants ({Array.isArray(participants) ? participants.length : 0})
+              </Text>
+              <Text className="text-xs text-violet-500">{showParticipants ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
           </View>
+
+          {showParticipants && (
+            <View className="mt-2 p-3 rounded-2xl border border-violet-200 bg-violet-50/60">
+              {(Array.isArray(participants) ? participants : []).filter(p => p.toLowerCase() !== 'lola').map((p) => {
+                const ACTIVE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+                const lastMsg = [...messages].reverse().find(m => m.name === p);
+                const isActive = lastMsg ? (Date.now() - lastMsg.ts) < ACTIVE_THRESHOLD : false;
+                const isMe = p === currentUserName;
+                return (
+                  <View key={p} className="flex-row items-center gap-2 py-1.5">
+                    <View className={`w-2.5 h-2.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                    <Text className={`text-sm ${isMe ? 'font-bold text-violet-800' : 'text-gray-800'}`}>
+                      {p}{isMe ? ' (you)' : ''}
+                    </Text>
+                    <Text className="text-xs text-gray-400 ml-auto">
+                      {isActive ? 'active' : 'away'}
+                    </Text>
+                  </View>
+                );
+              })}
+              {(!Array.isArray(participants) || participants.filter(p => p.toLowerCase() !== 'lola').length === 0) && (
+                <Text className="text-sm text-gray-400 italic">No participants yet</Text>
+              )}
+            </View>
+          )}
 
           <View className="mt-3">
             <LanguageSelector
@@ -315,10 +348,17 @@ export default function RoomChat({
             const isUser = Boolean(currentUserName && item.name === currentUserName);
             const isLola = String(item.name || '').toLowerCase() === 'lola';
 
-            const displayName =
-              !isUser && mode === 'm2' && isLola
-                ? `${currentUserName || 'Me'} | Translate`
-                : item.name;
+            // For m2 Translate mode, show the name of the person whose message was translated
+            const translatedAuthor = (() => {
+              if (!isLola || mode !== 'm2') return null;
+              const prev = messages
+                .filter(m => m.ts < item.ts && String(m.name || '').toLowerCase() !== 'lola')
+                .pop();
+              return prev?.name || 'Someone';
+            })();
+            const displayName = translatedAuthor
+              ? `${translatedAuthor} | Translate`
+              : item.name;
 
             // Voice note message
             if (item.type === 'voice' && item.msgId) {

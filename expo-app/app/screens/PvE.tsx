@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import SendButton from '../components/SendButton';
 import { sanitizeVariant } from '../lib/utils';
 import {
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  Animated,
 } from 'react-native';
 import { LolaVoiceButton } from '../components/LolaVoiceButton';
 import { translateFirst, TranslateButton } from '../components/TranslateButton';
@@ -22,6 +23,23 @@ import type { TtsProvider } from '../lib/api';
 import { useVoiceConversation } from '../hooks/useVoiceConversation';
 
 const COMPOSER_HEIGHT = 72;
+
+/**
+ * Split a bilingual Lola response into target-language text and
+ * parenthetical English translations shown inline like "(English here)".
+ */
+function splitBilingualText(text: string): { mainText: string; englishText: string } {
+  const english: string[] = [];
+  // Match parenthetical phrases ≥8 chars that look like English translations
+  const cleaned = text.replace(/\(([^)]{8,})\)/g, (_match, inner) => {
+    english.push(inner.trim());
+    return '';
+  });
+  return {
+    mainText: cleaned.replace(/\s{2,}/g, ' ').trim(),
+    englishText: english.join('\n'),
+  };
+}
 
 type PveMode = 'm1' | 'm3';
 
@@ -54,6 +72,20 @@ export default function PvEScreen({
   const mode = controlledMode ?? internalMode;
   const languageMeta = getLanguageMeta(language);
   const isVoiceMode = mode === 'm3';
+
+  // Impeccable: one-time mic entrance animation (scale 0.85→1 + opacity 0→1, 300ms)
+  const micScale = useRef(new Animated.Value(0.85)).current;
+  const micOpacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (isVoiceMode) {
+      micScale.setValue(0.85);
+      micOpacity.setValue(0);
+      Animated.parallel([
+        Animated.timing(micScale, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(micOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [isVoiceMode, micScale, micOpacity]);
   const voiceConversation = useVoiceConversation({
     language,
     conversationId,
@@ -184,29 +216,40 @@ export default function PvEScreen({
               </View>
             ) : null
           }
-          renderItem={({ item }) => (
-            <ChatBubble
-              role={item?.role}
-              content={item?.content}
-              footer={
-                item?.role === 'assistant' && mode === 'm3' ? (
+          renderItem={({ item }) => {
+            if (item?.role !== 'assistant') {
+              return <ChatBubble role={item?.role} content={item?.content} name={item?.name} />;
+            }
+
+            // m3 voice: englishTranslation from backend; m1 text: parse from parentheses
+            const hasBackendTranslation = !!item.englishTranslation;
+            const { mainText, englishText } = hasBackendTranslation
+              ? { mainText: item.content || '', englishText: '' }
+              : splitBilingualText(item.content || '');
+            const englishDisplay = item.englishTranslation || englishText;
+
+            return (
+              <ChatBubble
+                role="assistant"
+                content={mainText}
+                footer={
                   <View>
-                    {item?.englishTranslation ? (
-                      <Text className="text-sm text-gray-500 italic mb-2">
-                        {item.englishTranslation}
+                    {englishDisplay ? (
+                      <Text className="text-sm text-gray-400 italic mb-2">
+                        {englishDisplay}
                       </Text>
                     ) : null}
                     <LolaVoiceButton
-                      lolaReply={item?.content}
+                      lolaReply={mainText}
                       audioBase64={item?.audioBase64}
                       audioContentType={item?.audioContentType}
                       defaultSpeed={1.0}
                     />
                   </View>
-                ) : null
-              }
-            />
-          )}
+                }
+              />
+            );
+          }}
         />
 
         {/* Composer */}
@@ -279,30 +322,32 @@ export default function PvEScreen({
             <View className="flex-row items-end gap-2 px-1">
               {/* Mic button — shown in voice mode */}
               {isVoiceMode && (
-                <TouchableOpacity
-                  onPress={() => {
-                    if (!voiceConversation.isSupported) return;
-                    if (voiceConversation.state === 'recording') {
-                      voiceConversation.stopRecording();
-                    } else if (!voiceBusy) {
-                      voiceConversation.startRecording();
-                    }
-                  }}
-                  disabled={!voiceConversation.isSupported || (voiceBusy && voiceConversation.state !== 'recording')}
-                  activeOpacity={0.8}
-                  className={`items-center justify-center rounded-full ${
-                    voiceConversation.state === 'recording'
-                      ? 'bg-rose-500'
-                      : voiceBusy
-                      ? 'bg-gray-200'
-                      : 'bg-violet-600'
-                  }`}
-                  style={{ width: 44, height: 44 }}
-                >
-                  <Text className="text-lg text-white">
-                    {voiceConversation.state === 'recording' ? '■' : '🎙'}
-                  </Text>
-                </TouchableOpacity>
+                <Animated.View style={{ transform: [{ scale: micScale }], opacity: micOpacity }}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (!voiceConversation.isSupported) return;
+                      if (voiceConversation.state === 'recording') {
+                        voiceConversation.stopRecording();
+                      } else if (!voiceBusy) {
+                        voiceConversation.startRecording();
+                      }
+                    }}
+                    disabled={!voiceConversation.isSupported || (voiceBusy && voiceConversation.state !== 'recording')}
+                    activeOpacity={0.8}
+                    className={`items-center justify-center rounded-full ${
+                      voiceConversation.state === 'recording'
+                        ? 'bg-rose-500'
+                        : voiceBusy
+                        ? 'bg-gray-200'
+                        : 'bg-violet-600'
+                    }`}
+                    style={{ width: 48, height: 48 }}
+                  >
+                    <Text className="text-xl text-white">
+                      {voiceConversation.state === 'recording' ? '■' : '🎙'}
+                    </Text>
+                  </TouchableOpacity>
+                </Animated.View>
               )}
 
               <View className="flex-1">

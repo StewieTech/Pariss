@@ -37,7 +37,16 @@ type RoomDoc = {
   createdAt: number;
   updatedAt: number;
   participants?: string[];
+  displayName?: string;
 };
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60);
+}
 
 function makeId(len = 6) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -85,7 +94,7 @@ export async function createRoom(_req: Request, res: Response) {
   });
 
   // keep your existing response shape
-  return res.json({ roomId: id, joinPath: `/pvp/${id}` });
+  return res.json({ roomId: id, joinPath: `/pvp/${id}`, displayName: '' });
 }
 
 // List rooms (backend-driven active rooms)
@@ -110,6 +119,7 @@ export async function listRooms(req: Request, res: Response) {
       ok: true,
       rooms: rooms.map((r) => ({
         roomId: r._id,
+        displayName: (r as any).displayName || '',
         createdAt: Number((r as any).createdAt || 0),
         updatedAt: Number((r as any).updatedAt || 0),
         participantCount: Array.isArray((r as any).participants)
@@ -158,6 +168,7 @@ export async function joinRoom(req: Request, res: Response) {
   return res.json({
     ok: true,
     roomId: id,
+    displayName: (updatedRoom as any)?.displayName || '',
     participants: ((updatedRoom as any)?.participants || []) as string[],
     messages: messages.map((m) => ({
       author: m.author, text: m.text, ts: m.ts,
@@ -317,6 +328,7 @@ export async function getRoomState(req: Request, res: Response) {
 
   return res.json({
     roomId: id,
+    displayName: (room as any)?.displayName || '',
     participants: ((room as any)?.participants || []) as string[],
     messages: messages.map((m) => ({
       author: m.author, text: m.text, ts: m.ts,
@@ -324,6 +336,33 @@ export async function getRoomState(req: Request, res: Response) {
       ...(m.replyTo ? { replyTo: m.replyTo, replyType: m.replyType } : {}),
       ...(m.msgId ? { msgId: m.msgId } : {}),
     })),
+  });
+}
+
+// Rename a room (set custom displayName)
+export async function renameRoom(req: Request, res: Response) {
+  const { id } = req.params;
+  const rawName = String(req.body?.displayName || '').trim();
+  if (!rawName) return res.status(400).json({ error: 'displayName required' });
+
+  const db = await getDb();
+  const room = await db.collection<RoomDoc>(ROOMS).findOne({ _id: id });
+  if (!room) return res.status(404).json({ error: 'room not found' });
+
+  const displayName = rawName.slice(0, 80);
+  const slug = slugify(displayName);
+
+  await db.collection<RoomDoc>(ROOMS).updateOne(
+    { _id: id },
+    { $set: { displayName, updatedAt: Date.now() } }
+  );
+
+  return res.json({
+    ok: true,
+    roomId: id,
+    displayName,
+    slug,
+    shareUrl: `/${id}/${slug}`,
   });
 }
 
