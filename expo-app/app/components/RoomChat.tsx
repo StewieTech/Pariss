@@ -128,17 +128,18 @@ export default function RoomChat({
       textSendCountRef.current += 1;
 
       // Show voice nudge after every text send
+      // Impeccable: 400ms ease-out entrance, 300ms (75%) ease-in exit
       setShowVoiceNudge(true);
       Animated.timing(nudgeFade, {
         toValue: 1,
-        duration: 500,
+        duration: 400,
         useNativeDriver: true,
       }).start();
       // Auto-dismiss after 10 seconds
       setTimeout(() => {
         Animated.timing(nudgeFade, {
           toValue: 0,
-          duration: 400,
+          duration: 300,
           useNativeDriver: true,
         }).start(() => setShowVoiceNudge(false));
       }, 10000);

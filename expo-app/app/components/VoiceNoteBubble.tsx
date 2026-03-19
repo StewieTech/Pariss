@@ -18,23 +18,21 @@ function ReviewButton({ onReply, msgId, hasNewReview }: {
   msgId: string;
   hasNewReview?: boolean;
 }) {
-  const pulse = useRef(new Animated.Value(1)).current;
+  // Impeccable: one-time entrance (300ms ease-out), then static — no animation fatigue
+  const scale = useRef(new Animated.Value(0.85)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.12, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [pulse]);
+    Animated.parallel([
+      Animated.timing(scale, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+    ]).start();
+  }, [scale, opacity]);
 
   if (!onReply) return null;
 
   return (
-    <Animated.View style={{ transform: [{ scale: pulse }] }}>
+    <Animated.View style={{ transform: [{ scale }], opacity }}>
       <TouchableOpacity
         onPress={() => onReply(msgId)}
         className="flex-row items-center gap-1 px-2.5 py-1 rounded-full bg-violet-100 border border-violet-200"

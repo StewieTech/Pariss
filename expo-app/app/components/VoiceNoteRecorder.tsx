@@ -58,7 +58,9 @@ export default function VoiceNoteRecorder({
   const startedAtRef = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const scaleAnim = useRef(new Animated.Value(0.85)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -73,37 +75,42 @@ export default function VoiceNoteRecorder({
     };
   }, []);
 
+  // Impeccable-aligned motion: 100/300/500 rule, ease-out enter, no bounce
   useEffect(() => {
     if (state === 'recording') {
+      // Functional feedback: tight opacity pulse (250ms per Impeccable state-change rule)
       const anim = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.3, duration: 600, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          Animated.timing(opacityAnim, { toValue: 0.5, duration: 250, useNativeDriver: true }),
+          Animated.timing(opacityAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
         ])
       );
+      scaleAnim.setValue(1);
       anim.start();
       return () => anim.stop();
     } else if (highlighted) {
-      const anim = Animated.loop(
+      // Attention-grab: one scale pop (300ms ease-out) then gentle opacity breathing
+      opacityAnim.setValue(1);
+      Animated.timing(scaleAnim, { toValue: 1.12, duration: 200, useNativeDriver: true }).start(() => {
+        Animated.timing(scaleAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      });
+      const glow = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.25, duration: 500, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
         ])
       );
-      anim.start();
-      return () => anim.stop();
+      glow.start();
+      return () => glow.stop();
     } else {
-      // Gentle idle pulse to attract attention
-      const anim = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.08, duration: 1200, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
-        ])
-      );
-      anim.start();
-      return () => anim.stop();
+      // Idle entrance: scale 0.85→1 + opacity 0→1 (300ms ease-out), then static
+      glowAnim.setValue(0);
+      Animated.parallel([
+        Animated.timing(scaleAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(opacityAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]).start();
     }
-  }, [state, pulseAnim, highlighted]);
+  }, [state, scaleAnim, opacityAnim, glowAnim, highlighted]);
 
   const startTimer = useCallback(() => {
     startedAtRef.current = Date.now();
@@ -286,8 +293,8 @@ export default function VoiceNoteRecorder({
       <View className="flex-row items-center gap-2">
         {state === 'idle' && (
           <Animated.View style={{
-            transform: [{ scale: pulseAnim }],
-            ...(highlighted ? { shadowColor: '#e11d48', shadowOpacity: 0.5, shadowRadius: 12, elevation: 8 } : {}),
+            transform: [{ scale: scaleAnim }],
+            opacity: highlighted ? glowAnim : opacityAnim,
           }}>
             <TouchableOpacity
               onPress={startRecording}
@@ -304,7 +311,7 @@ export default function VoiceNoteRecorder({
 
         {state === 'recording' && (
           <>
-            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+            <Animated.View style={{ opacity: opacityAnim }}>
               <View className="w-3 h-3 rounded-full bg-rose-500" />
             </Animated.View>
             <Text className="text-sm font-semibold text-gray-700">
