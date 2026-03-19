@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import OpenAI from 'openai';
 import { handleChat } from '../services/chat.service';
 import { transcribeAudio } from '../services/transcription.service';
 import { synthesize, type TtsProvider } from '../services/voice.service';
@@ -15,6 +16,7 @@ const VoiceTurnSchema = z.object({
   conversationId: z.string().min(1),
   voiceId: z.string().min(1).optional(),
   ttsProvider: z.enum(['openai', 'elevenlabs']).optional().default('openai'),
+  speed: z.number().min(0.25).max(4.0).optional().default(1.0),
 });
 
 function decodeAudioBase64(audioBase64: string) {
@@ -40,6 +42,7 @@ export async function postVoiceTurn(req: Request, res: Response) {
       conversationId,
       voiceId,
       ttsProvider,
+      speed,
     } = parsed.data;
     const selectedLanguage = normalizeLanguage(language);
     const audioBuffer = decodeAudioBase64(audioBase64);
@@ -76,17 +79,42 @@ export async function postVoiceTurn(req: Request, res: Response) {
       process.env.ELEVEN_VOICE_ID ||
       'LEnmbrrxYsUYS7vsRRwD';
 
+    // Strip bracketed English glosses for TTS so Lola speaks cleanly
+    const ttsText = chat.reply.replace(/\s*\[[^\]]*\]/g, '');
+
     const ttsStartedAt = Date.now();
-    const audio = await synthesize(chat.reply, resolvedVoiceId, ttsProvider as TtsProvider);
+    const audio = await synthesize(ttsText, resolvedVoiceId, ttsProvider as TtsProvider, speed);
     const ttsMs = Date.now() - ttsStartedAt;
+
+    // Quick English translation (non-blocking best-effort)
+    let englishTranslation = '';
+    try {
+      const openaiKey = process.env.OPENAI_API_KEY;
+      if (!openaiKey) throw new Error('OPENAI_API_KEY not set');
+      const oai = new OpenAI({ apiKey: openaiKey });
+      const transResp = await oai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'Translate the following text to natural English. Return ONLY the English translation, nothing else.' },
+          { role: 'user', content: chat.reply.replace(/\s*\[[^\]]*\]/g, '') },
+        ],
+        temperature: 0.2,
+        max_tokens: 300,
+      });
+      englishTranslation = transResp.choices?.[0]?.message?.content?.trim() || '';
+    } catch (e) {
+      console.warn('English translation failed (non-critical):', (e as any)?.message);
+    }
 
     return res.json({
       transcript,
       assistantText: chat.reply,
+      englishTranslation,
       audioBase64: audio.buffer.toString('base64'),
       audioContentType: audio.contentType || 'audio/mpeg',
       selectedLanguage,
       conversationId,
+      speed,
       timings: {
         sttMs,
         llmMs,

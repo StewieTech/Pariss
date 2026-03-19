@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { getDb } from '../lib/mongo';
 import { handleChat } from '../services/chat.service';
 import { DEFAULT_LANGUAGE, normalizeLanguage } from '../utils/language';
+import OpenAI from 'openai';
 
 // Suggest replies service
 import { getSuggestions as suggestService } from '../services/suggest.service';
@@ -14,6 +15,21 @@ type MessageDoc = {
   ts: number;
   clientMessageId?: string;
   conversationId?: string;
+  // Voice note fields
+  type?: 'text' | 'voice';
+  msgId?: string;
+  durationMs?: number;
+  // Reply/review fields
+  replyTo?: string;
+  replyType?: 'comment' | 'review';
+};
+
+type AudioDoc = {
+  msgId: string;
+  roomId: string;
+  audioBase64: string;
+  audioContentType: string;
+  ts: number;
 };
 
 type RoomDoc = {
@@ -52,6 +68,7 @@ function parseSinceUpdatedAt(req: Request): number {
 // Collections
 const ROOMS = 'pvp_rooms';
 const MSGS = 'pvp_messages';
+const AUDIO = 'pvp_audio';
 
 // Create a room
 export async function createRoom(_req: Request, res: Response) {
@@ -142,7 +159,12 @@ export async function joinRoom(req: Request, res: Response) {
     ok: true,
     roomId: id,
     participants: ((updatedRoom as any)?.participants || []) as string[],
-    messages: messages.map((m) => ({ author: m.author, text: m.text, ts: m.ts })),
+    messages: messages.map((m) => ({
+      author: m.author, text: m.text, ts: m.ts,
+      ...(m.type === 'voice' ? { type: 'voice', msgId: m.msgId, durationMs: m.durationMs } : {}),
+      ...(m.replyTo ? { replyTo: m.replyTo, replyType: m.replyType } : {}),
+      ...(m.msgId ? { msgId: m.msgId } : {}),
+    })),
   });
 }
 
@@ -150,7 +172,7 @@ export async function joinRoom(req: Request, res: Response) {
 export async function postMessage(req: Request, res: Response) {
   const { id } = req.params;
 
-  // ✅ accept both author and name (your client sends author)
+  // accept both author and name (your client sends author)
   const author = String(req.body?.author || req.body?.name || '').trim();
   const text = String(req.body?.text || '').trim();
 
@@ -296,8 +318,145 @@ export async function getRoomState(req: Request, res: Response) {
   return res.json({
     roomId: id,
     participants: ((room as any)?.participants || []) as string[],
-    messages: messages.map((m) => ({ author: m.author, text: m.text, ts: m.ts })),
+    messages: messages.map((m) => ({
+      author: m.author, text: m.text, ts: m.ts,
+      ...(m.type === 'voice' ? { type: 'voice', msgId: m.msgId, durationMs: m.durationMs } : {}),
+      ...(m.replyTo ? { replyTo: m.replyTo, replyType: m.replyType } : {}),
+      ...(m.msgId ? { msgId: m.msgId } : {}),
+    })),
   });
+}
+
+// Post a voice message
+export async function postVoiceMessage(req: Request, res: Response) {
+  const { id } = req.params;
+  const author = String(req.body?.author || req.body?.name || '').trim();
+  const audioBase64 = String(req.body?.audioBase64 || '').trim();
+  const mimeType = String(req.body?.mimeType || 'audio/webm').trim();
+  const language = normalizeLanguage(req.body?.language || DEFAULT_LANGUAGE);
+  const durationMs = Number(req.body?.durationMs || 0);
+  const replyTo = String(req.body?.replyTo || '').trim() || undefined;
+  const replyType = (req.body?.replyType as 'comment' | 'review') || (replyTo ? 'review' : undefined);
+
+  if (!author) return res.status(400).json({ error: 'author/name required' });
+  if (!audioBase64) return res.status(400).json({ error: 'audioBase64 required' });
+
+  const db = await getDb();
+  const room = await db.collection<RoomDoc>(ROOMS).findOne({ _id: id });
+  if (!room) return res.status(404).json({ error: 'room not found' });
+
+  // Transcribe audio with Whisper
+  let transcript = '';
+  try {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error('OPENAI_API_KEY not set');
+    const oai = new OpenAI({ apiKey: key });
+
+    const audioBuffer = Buffer.from(audioBase64, 'base64');
+    const ext = mimeType.includes('webm') ? 'webm' : mimeType.includes('mp4') ? 'mp4' : 'webm';
+    const file = new File([audioBuffer], `voice.${ext}`, { type: mimeType });
+
+    const sttResp = await oai.audio.transcriptions.create({
+      model: 'whisper-1',
+      file,
+      language: language === 'french' ? 'fr' : language === 'spanish' ? 'es' : language === 'german' ? 'de' : language === 'japanese' ? 'ja' : undefined,
+    });
+    transcript = sttResp.text || '';
+  } catch (err: any) {
+    console.warn('Voice note transcription failed:', String(err?.message || err));
+    transcript = '(voice note)';
+  }
+
+  const msgId = `vn_${Date.now()}_${makeId(8)}`;
+  const ts = Date.now();
+
+  // Store message doc (without audio)
+  const msg: MessageDoc = {
+    roomId: id,
+    author,
+    text: transcript,
+    ts,
+    type: 'voice',
+    msgId,
+    durationMs: durationMs || undefined,
+    replyTo,
+    replyType,
+  };
+  await db.collection<MessageDoc>(MSGS).insertOne(msg);
+
+  // Store audio separately
+  const audioDoc: AudioDoc = {
+    msgId,
+    roomId: id,
+    audioBase64,
+    audioContentType: mimeType,
+    ts,
+  };
+  await db.collection<AudioDoc>(AUDIO).insertOne(audioDoc);
+
+  // Update room
+  await db.collection<RoomDoc>(ROOMS).updateOne(
+    { _id: id },
+    { $addToSet: { participants: author }, $set: { updatedAt: ts } }
+  );
+
+  return res.json({
+    ok: true,
+    message: {
+      author, text: transcript, ts, type: 'voice', msgId,
+      durationMs: durationMs || undefined,
+      replyTo, replyType,
+    },
+  });
+}
+
+// Fetch audio for a voice message
+export async function getAudio(req: Request, res: Response) {
+  const { msgId } = req.params;
+  if (!msgId) return res.status(400).json({ error: 'msgId required' });
+
+  const db = await getDb();
+  const audio = await db.collection<AudioDoc>(AUDIO).findOne({ msgId });
+  if (!audio) return res.status(404).json({ error: 'audio not found' });
+
+  return res.json({
+    msgId: audio.msgId,
+    audioBase64: audio.audioBase64,
+    audioContentType: audio.audioContentType,
+  });
+}
+
+// Generate a suggested phrase for voice note practice
+export async function generateVoiceSuggestion(req: Request, res: Response) {
+  const lastMessage = String(req.body?.lastMessage || '').trim();
+  const language = normalizeLanguage(req.body?.language || DEFAULT_LANGUAGE);
+
+  if (!lastMessage) return res.status(400).json({ error: 'lastMessage required' });
+
+  try {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error('OPENAI_API_KEY not set');
+    const oai = new OpenAI({ apiKey: key });
+
+    const langLabel = language.charAt(0).toUpperCase() + language.slice(1);
+    const resp = await oai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a language practice assistant. Given Lola's last message in ${langLabel}, suggest a short natural reply the student should say in ${langLabel}. Return ONLY the ${langLabel} phrase, nothing else. Keep it 3-10 words.`,
+        },
+        { role: 'user', content: `Lola said: "${lastMessage}"\nSuggest what the student should say back in ${langLabel}:` },
+      ],
+      temperature: 0.7,
+      max_tokens: 60,
+    });
+
+    const suggestion = String(resp?.choices?.[0]?.message?.content || '').trim();
+    return res.json({ suggestion });
+  } catch (err: any) {
+    return res.status(500).json({ error: String(err?.message || err) });
+  }
 }
 
 // Suggest replies

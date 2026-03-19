@@ -68,10 +68,12 @@ export async function sendChatMessage(
 export type VoiceTurnResponse = {
   transcript: string;
   assistantText: string;
+  englishTranslation?: string;
   audioBase64: string;
   audioContentType: string;
   selectedLanguage: AppLanguage;
   conversationId: string;
+  speed?: number;
   timings?: {
     sttMs: number;
     llmMs: number;
@@ -89,6 +91,7 @@ export async function sendVoiceTurn(input: {
   conversationId: string;
   voiceId?: string;
   ttsProvider?: TtsProvider;
+  speed?: number;
 }) {
   const res = await client.post(
     '/chat/voice-turn',
@@ -100,6 +103,7 @@ export async function sendVoiceTurn(input: {
       conversationId: input.conversationId,
       voiceId: input.voiceId,
       ttsProvider: input.ttsProvider || 'openai',
+      speed: input.speed ?? 1.0,
     },
     60000
   );
@@ -163,6 +167,63 @@ export async function getPvpRoom(roomId: string, sinceTs?: number) : Promise<Pvp
 export async function suggestReplies(roomId: string, lastText: string, language?: AppLanguage) {
   const res = await client.post(`/pvp/${roomId}/suggest`, { text: lastText, language });
   return res.data;
+}
+
+export async function postPvpVoiceMessage(
+  roomId: string,
+  author: string,
+  audioBase64: string,
+  mimeType: string,
+  options?: {
+    language?: AppLanguage;
+    durationMs?: number;
+    replyTo?: string;
+    replyType?: 'comment' | 'review';
+  }
+) {
+  const res = await client.post(`/pvp/${roomId}/voice-message`, {
+    author,
+    audioBase64,
+    mimeType,
+    language: options?.language,
+    durationMs: options?.durationMs,
+    replyTo: options?.replyTo,
+    replyType: options?.replyType,
+  }, 60000);
+  return res.data as {
+    ok: boolean;
+    message: {
+      author: string;
+      text: string;
+      ts: number;
+      type: 'voice';
+      msgId: string;
+      durationMs?: number;
+      replyTo?: string;
+      replyType?: string;
+    };
+  };
+}
+
+export async function getPvpAudio(msgId: string) {
+  const res = await client.get(`/pvp/audio/${encodeURIComponent(msgId)}`);
+  return res.data as {
+    msgId: string;
+    audioBase64: string;
+    audioContentType: string;
+  };
+}
+
+export async function getVoiceSuggestion(
+  roomId: string,
+  lastMessage: string,
+  language?: AppLanguage
+) {
+  const res = await client.post(`/pvp/${roomId}/voice-suggest`, {
+    lastMessage,
+    language,
+  });
+  return res.data as { suggestion: string };
 }
 
 export async function listPvpRooms(limit?: number, sinceUpdatedAt?: number) {

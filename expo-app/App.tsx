@@ -90,8 +90,6 @@ export default function App() {
   const handleLanguageChange = (nextLanguage: AppLanguage) => {
     if (nextLanguage === language) return;
     setLanguage(nextLanguage);
-    setChatConversationId(createConversationId('pve'));
-    setRoomConversationId(createConversationId('pvp'));
   };
 
   return (
@@ -104,7 +102,6 @@ export default function App() {
           {screen === 'profile' && <ProfileScreen onDone={() => setScreen('main')} />}
           {screen === 'pve' && (
             <PvEScreen
-              key={chatConversationId}
               mode={pveMode}
               onModeChange={setPveMode}
               language={language}

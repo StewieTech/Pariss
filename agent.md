@@ -174,6 +174,29 @@ TTS premium: **ElevenLabs** (~$0.30/1K chars). User toggles via Standard/Premium
 
 ---
 
+## Animation Reference — Impeccable
+
+Use **Impeccable** as the primary reference for all motion and interaction design:
+
+- **Repo:** https://github.com/pbakaus/impeccable
+- **Docs:** https://impeccable.style
+
+### Key Motion Rules (from Impeccable `motion-design.md`)
+1. **Duration: 100/300/500 rule** — 100-150ms button feedback, 200-300ms state changes, 300-500ms layout, 500-800ms entrances. Exit = 75% of entrance.
+2. **Easing** — ease-out for entering, ease-in for leaving, ease-in-out for toggles. **Never bounce/elastic** (feels dated).
+3. **Only animate `transform` and `opacity`** — everything else triggers layout recalc.
+4. **Animation fatigue is real** — don't animate everything at once. Use purposeful, limited motion.
+5. **Stagger cap** — stagger delays capped so total ≤ 500ms.
+6. **Reduced motion** — always respect `prefers-reduced-motion`.
+
+### Key Interaction Rules (from Impeccable `interaction-design.md`)
+1. **8 states** for every interactive element: default, hover, focus, active, disabled, loading, error, success.
+2. **Optimistic UI** for low-stakes actions (likes, voice notes) — update immediately, rollback on failure.
+3. **Skeleton screens > spinners** — preview content shape.
+4. **Undo > confirm** — users click through confirmations mindlessly.
+
+---
+
 ## Testing
 
 ```bash
