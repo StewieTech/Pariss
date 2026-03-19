@@ -174,6 +174,15 @@ TTS premium: **ElevenLabs** (~$0.30/1K chars). User toggles via Standard/Premium
 
 ---
 
+## Animation Reference
+
+Use **Impeccable AI** as the primary reference for animations and micro-interactions in Lola Lingo:
+
+- **Repo:** https://github.com/impeccableai/impeccable
+- Use this repo's animation patterns (pulse, scale, fade, transitions) as the gold standard when building UI animations — especially for voice note recording, review buttons, nudge prompts, and interactive elements in the community chat.
+
+---
+
 ## Testing
 
 ```bash

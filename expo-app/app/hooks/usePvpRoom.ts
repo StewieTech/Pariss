@@ -4,18 +4,31 @@ import * as api from '../lib/api';
 import type { PvpRoom } from '../types/chat';
 import type { AppLanguage } from '../lib/languages';
 
-type Msg = { name: string; text: string; ts: number };
+export type Msg = {
+  name: string;
+  text: string;
+  ts: number;
+  type?: 'text' | 'voice';
+  msgId?: string;
+  durationMs?: number;
+  replyTo?: string;
+  replyType?: 'comment' | 'review';
+};
 
 function normalizeMessages(raw: any[]): Msg[] {
   return (raw || []).map((m: any) => ({
     name: String(m?.name || m?.author || m?.authorName || 'unknown'),
     text: String(m?.text || m?.content || m?.body || ''),
     ts: Number(m?.ts || m?.ts_ms || Date.now()),
+    ...(m?.type === 'voice' ? { type: 'voice' as const, msgId: m.msgId, durationMs: m.durationMs } : {}),
+    ...(m?.replyTo ? { replyTo: m.replyTo, replyType: m.replyType } : {}),
+    ...(m?.msgId ? { msgId: m.msgId } : {}),
   }));
 }
 
 // Stable dedupe key
 function msgKey(m: Msg) {
+  if (m.msgId) return m.msgId;
   return `${m.name}::${m.ts}::${m.text}`;
 }
 

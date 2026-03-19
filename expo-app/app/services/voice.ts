@@ -29,7 +29,8 @@ export async function stopPlayback(): Promise<void> {
 
 export async function playBase64Audio(
   b64: string,
-  contentType = 'audio/mpeg'
+  contentType = 'audio/mpeg',
+  playbackRate = 1.0
 ): Promise<void> {
   if (!b64) return;
 
@@ -97,6 +98,7 @@ export async function playBase64Audio(
       audio.addEventListener('ended', onEnded);
       audio.addEventListener('error', onError);
 
+      audio.playbackRate = Math.max(0.25, Math.min(4.0, playbackRate));
       audio.play().catch((err: any) => {
         cleanup();
         settle('error', err);
@@ -147,6 +149,7 @@ export async function playBase64Audio(
 
     sound
       .loadAsync({ uri: `data:${contentType || 'audio/mpeg'};base64,${b64}` })
+      .then(() => sound.setRateAsync(playbackRate, true).catch(() => {}))
       .then(() => sound.playAsync())
       .catch((err) => {
         void stop().finally(() => settle('error', err));

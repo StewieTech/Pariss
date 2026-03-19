@@ -1,6 +1,6 @@
 // components/RoomChat.tsx
-import React, { useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, Platform, Animated } from 'react-native';
 import { LolaChatInput } from './LolaChatInput';
 import { sanitizeVariant } from '../lib/sanitize';
 import { translateFirst, TranslateButton } from './TranslateButton';
@@ -9,20 +9,21 @@ import ChatBubble from './ChatBubble';
 import { LolaVoiceButton } from './LolaVoiceButton';
 import ChatMessageList from './ChatMessageList';
 import LanguageSelector from './LanguageSelector';
-import type { AppLanguage } from '../lib/languages';
+import VoiceNoteBubble from './VoiceNoteBubble';
+import VoiceNoteRecorder from './VoiceNoteRecorder';
+import * as api from '../lib/api';
+import { getLanguageMeta, type AppLanguage } from '../lib/languages';
+import type { Msg } from '../hooks/usePvpRoom';
 
-const COMPOSER_HEIGHT = 92; // keep consistent with PvE
+const COMPOSER_HEIGHT = 120;
 
-export type RoomChatMessage = {
-  name: string;
-  text: string;
-};
+export type RoomChatMessage = Msg;
 
 export type RoomChatProps = {
   roomId: string;
   participants: string[];
   messages: RoomChatMessage[];
-  setMessages: React.Dispatch<React.SetStateAction<RoomChatMessage[]>>; // kept for future if you want optimistic updates
+  setMessages: React.Dispatch<React.SetStateAction<RoomChatMessage[]>>;
   onSend: (
     text: string,
     opts: {
@@ -33,7 +34,7 @@ export type RoomChatProps = {
     }
   ) => Promise<void> | void;
   onLeave: () => void;
-  currentUserName?: string; // optional; lets us style "my" messages differently
+  currentUserName?: string;
   language: AppLanguage;
   onLanguageChange: (language: AppLanguage) => void;
   conversationId: string;
@@ -58,12 +59,43 @@ export default function RoomChat({
   const [translateOptions, setTranslateOptions] = useState<string[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
 
-  // Prevent duplicate sends from Enter + button press in quick succession
+  // Prevent duplicate sends
   const sendingRef = useRef(false);
   const cooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSending, setIsSending] = useState(false);
 
+  // Voice note state
+  const [showVoiceNudge, setShowVoiceNudge] = useState(false);
+  const [voiceSuggestion, setVoiceSuggestion] = useState<string | null>(null);
+  const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<string | null>(null);
+  const [reviewInstruction, setReviewInstruction] = useState<string | null>(null);
+  const [reviewedMsgIds, setReviewedMsgIds] = useState<Set<string>>(new Set());
+  const nudgeFade = useRef(new Animated.Value(0)).current;
+  const textSendCountRef = useRef(0);
+
+  const langMeta = getLanguageMeta(language);
+
   const isWeb = Platform.OS === 'web';
+
+  // Find the last Lola message (for AI suggestion)
+  const lastLolaMsg = [...messages].reverse().find(
+    (m) => String(m.name || '').toLowerCase() === 'lola'
+  );
+
+  // Count reviews for a given msgId
+  const getReviewCount = useCallback(
+    (msgId: string) =>
+      messages.filter((m) => m.replyTo === msgId).length,
+    [messages]
+  );
+
+  // Check if a voice note has new reviews (reviews from others)
+  const hasNewReview = useCallback(
+    (msgId: string) => !reviewedMsgIds.has(msgId) &&
+      messages.some((m) => m.replyTo === msgId && m.name !== currentUserName),
+    [messages, currentUserName, reviewedMsgIds]
+  );
 
   async function handleTranslateFirst() {
     if (!text) return;
@@ -80,11 +112,6 @@ export default function RoomChat({
     }
   }
 
-  // Send behavior: per choice B, RoomChat send should go to OpenAI (like PvE) in m1/m3.
-  // In Option A, the client posts to the room endpoint and the server persists BOTH the user
-  // message and Lola's reply. RoomChat should therefore call `onSend` (room send) and rely on
-  // polling/state from the parent to display messages.
-
   async function handleSend() {
     const t = text.trim();
     if (!t) return;
@@ -98,6 +125,23 @@ export default function RoomChat({
         onSend(t, { includeLola, mode: backendMode, language, conversationId })
       );
       setText('');
+      textSendCountRef.current += 1;
+
+      // Show voice nudge after every text send
+      setShowVoiceNudge(true);
+      Animated.timing(nudgeFade, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+      // Auto-dismiss after 10 seconds
+      setTimeout(() => {
+        Animated.timing(nudgeFade, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }).start(() => setShowVoiceNudge(false));
+      }, 10000);
     } finally {
       if (cooldownRef.current) clearTimeout(cooldownRef.current);
       cooldownRef.current = setTimeout(() => {
@@ -106,6 +150,93 @@ export default function RoomChat({
         cooldownRef.current = null;
       }, 800);
     }
+  }
+
+  // Fetch AI suggestion when user is about to record
+  async function fetchSuggestion() {
+    if (!lastLolaMsg) return;
+    setIsLoadingSuggestion(true);
+    setVoiceSuggestion(null);
+    try {
+      const res = await api.getVoiceSuggestion(roomId, lastLolaMsg.text, language);
+      setVoiceSuggestion(res.suggestion || null);
+    } catch (e) {
+      console.warn('voice suggestion failed', e);
+    } finally {
+      setIsLoadingSuggestion(false);
+    }
+  }
+
+  // Handle voice note recording complete
+  const handleVoiceNoteComplete = useCallback(
+    async (audioBase64: string, mimeType: string, durationMs: number) => {
+      try {
+        const author = currentUserName || 'me';
+        const res = await api.postPvpVoiceMessage(roomId, author, audioBase64, mimeType, {
+          language,
+          durationMs,
+          replyTo: replyTarget || undefined,
+          replyType: replyTarget ? 'review' : undefined,
+        });
+
+        // Optimistic insert
+        if (res?.ok && res.message) {
+          const m = res.message;
+          setMessages((prev) => {
+            const exists = prev.some(
+              (p) => p.msgId && p.msgId === m.msgId
+            );
+            if (exists) return prev;
+            return [
+              ...prev,
+              {
+                name: m.author,
+                text: m.text,
+                ts: m.ts,
+                type: 'voice',
+                msgId: m.msgId,
+                durationMs: m.durationMs,
+                replyTo: m.replyTo,
+                replyType: m.replyType as any,
+              },
+            ];
+          });
+        }
+
+        setReplyTarget(null);
+        setReviewInstruction(null);
+        setShowVoiceNudge(false);
+        setVoiceSuggestion(null);
+      } catch (e: any) {
+        console.error('Voice note send failed', e);
+      }
+    },
+    [roomId, currentUserName, language, replyTarget, setMessages]
+  );
+
+  // Handle reply button press
+  function handleReply(msgId: string) {
+    setReplyTarget(msgId);
+    setReviewInstruction(
+      `Record a voice note to review their pronunciation, or reply in ${langMeta.label}!`
+    );
+    // Mark as reviewed
+    setReviewedMsgIds((prev) => new Set(prev).add(msgId));
+    // Fetch suggestion for the voice note they're replying to
+    const target = messages.find((m) => m.msgId === msgId);
+    if (target) {
+      setIsLoadingSuggestion(true);
+      setVoiceSuggestion(null);
+      api.getVoiceSuggestion(roomId, target.text, language)
+        .then((res) => setVoiceSuggestion(res.suggestion || null))
+        .catch(() => {})
+        .finally(() => setIsLoadingSuggestion(false));
+    }
+  }
+
+  // Find the parent message for a reply
+  function getParentMsg(replyToId: string) {
+    return messages.find((m) => m.msgId === replyToId);
   }
 
   return (
@@ -134,7 +265,6 @@ export default function RoomChat({
             value={mode}
             onChange={setMode}
             items={[
-              // { label: 'm1: LolaChat', value: 'm1' },
               { label: 'm0: None', value: 'm0' },
               { label: 'm1: LolaChat', value: 'm1' },
               { label: 'm2: TranslateOnly', value: 'm2' },
@@ -154,8 +284,10 @@ export default function RoomChat({
 
         {/* List */}
         <ChatMessageList<RoomChatMessage>
-          data={messages}
-          keyExtractor={(item, index) => `${roomId}-${index}`}
+          data={messages.filter((m) => !m.replyTo)}
+          keyExtractor={(item, index) =>
+            item.msgId || `${roomId}-${index}`
+          }
           bottomPadding={isWeb ? COMPOSER_HEIGHT + 16 : 12}
           overlayBottomOffset={isWeb ? COMPOSER_HEIGHT + 28 : 84}
           header={
@@ -179,30 +311,101 @@ export default function RoomChat({
             ) : null
           }
           renderItem={({ item }) => {
-              const isUser = Boolean(currentUserName && item.name === currentUserName);
-              const isLola = String(item.name || '').toLowerCase() === 'lola';
+            const isUser = Boolean(currentUserName && item.name === currentUserName);
+            const isLola = String(item.name || '').toLowerCase() === 'lola';
 
-              // Requested: in m2, only Lola responses should be renamed to
-              // "<currentUserName> | Translate". Don't rename other participants.
-              const displayName =
-                !isUser && mode === 'm2' && isLola
-                  ? `${currentUserName || 'Me'} | Translate`
-                  : item.name;
+            const displayName =
+              !isUser && mode === 'm2' && isLola
+                ? `${currentUserName || 'Me'} | Translate`
+                : item.name;
+
+            // Voice note message
+            if (item.type === 'voice' && item.msgId) {
+              const replies = messages.filter((m) => m.replyTo === item.msgId);
 
               return (
-                <ChatBubble
-                  role={isUser ? 'user' : 'assistant'}
-                  content={item.text}
-                  name={displayName}
-                  variant={!isUser && isLola ? 'lola' : 'default'}
-                  footer={
-                    !isUser && mode === 'm3' ? (
-                      <LolaVoiceButton lolaReply={item.text} />
-                    ) : null
-                  }
-                />
+                <View className="mb-2">
+                  {/* Author label */}
+                  <Text
+                    className={`text-xs font-semibold mb-1 px-1 ${
+                      isUser ? 'text-right text-violet-700' : 'text-gray-600'
+                    }`}
+                  >
+                    {displayName}
+                  </Text>
+
+                  <View className={isUser ? 'self-end max-w-[85%]' : 'self-start max-w-[85%]'}>
+                    <VoiceNoteBubble
+                      msgId={item.msgId}
+                      transcript={item.text}
+                      durationMs={item.durationMs}
+                      isOwnMessage={isUser}
+                      onReply={handleReply}
+                      reviewCount={getReviewCount(item.msgId)}
+                      hasNewReview={isUser && hasNewReview(item.msgId)}
+                    />
+                  </View>
+
+                  {/* Threaded replies/reviews */}
+                  {replies.length > 0 && (
+                    <View className="ml-8 mt-1 border-l-2 border-violet-100 pl-3">
+                      <Text className="text-xs font-semibold text-violet-600 mb-1">
+                        Reviews ({replies.length})
+                      </Text>
+                      {replies.map((reply, ri) => {
+                        const isReplyUser = reply.name === currentUserName;
+                        if (reply.type === 'voice' && reply.msgId) {
+                          return (
+                            <View key={reply.msgId || ri} className="mb-1">
+                              <Text className="text-xs text-gray-500 mb-0.5">
+                                {reply.name}
+                              </Text>
+                              <VoiceNoteBubble
+                                msgId={reply.msgId}
+                                transcript={reply.text}
+                                durationMs={reply.durationMs}
+                                isOwnMessage={isReplyUser}
+                              />
+                            </View>
+                          );
+                        }
+                        return (
+                          <View
+                            key={reply.msgId || ri}
+                            className={`rounded-xl px-2.5 py-1.5 mb-1 ${
+                              isReplyUser
+                                ? 'bg-violet-100 self-end'
+                                : 'bg-gray-100 self-start'
+                            }`}
+                          >
+                            <Text className="text-xs font-semibold text-gray-600">
+                              {reply.name}
+                            </Text>
+                            <Text className="text-sm text-gray-800">{reply.text}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
               );
-            }}
+            }
+
+            // Regular text message
+            return (
+              <ChatBubble
+                role={isUser ? 'user' : 'assistant'}
+                content={item.text}
+                name={displayName}
+                variant={!isUser && isLola ? 'lola' : 'default'}
+                footer={
+                  !isUser && mode === 'm3' ? (
+                    <LolaVoiceButton lolaReply={item.text} />
+                  ) : null
+                }
+              />
+            );
+          }}
         />
 
         {/* Composer */}
@@ -217,7 +420,6 @@ export default function RoomChat({
                   backgroundColor: 'white',
                   borderTopWidth: 1,
                   borderTopColor: '#e5e7eb',
-                  // paddingTop: 8,
                   paddingBottom: 16,
                   paddingLeft: 12,
                   paddingRight: 12,
@@ -227,13 +429,76 @@ export default function RoomChat({
           className={!isWeb ? 'border-t border-gray-200 bg-white pt-2 pb-4' : ''}
         >
           <View className={isWeb ? 'w-full self-center max-w-3xl' : ''}>
+            {/* Voice nudge prompt */}
+            {showVoiceNudge && (
+              <Animated.View
+                style={{ opacity: nudgeFade }}
+                className="mb-2 mx-1 px-3 py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 flex-row items-center gap-2"
+              >
+                <Text className="text-lg">🎙</Text>
+                <View className="flex-1">
+                  <Text className="text-sm font-semibold text-emerald-800">
+                    Now say it in {langMeta.label}!
+                  </Text>
+                  <Text className="text-xs text-emerald-600">
+                    Leave a voice note so others can review your pronunciation
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowVoiceNudge(false);
+                    fetchSuggestion();
+                  }}
+                  className="px-3 py-1.5 rounded-full bg-emerald-600"
+                >
+                  <Text className="text-white text-xs font-semibold">Record</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+
+            {/* Reply target indicator */}
+            {replyTarget && (
+              <View className="mb-2 mx-1 px-3 py-2 rounded-xl bg-violet-50 border border-violet-200 flex-row items-center">
+                <View className="flex-1">
+                  <Text className="text-xs font-semibold text-violet-700">
+                    Reviewing voice note
+                  </Text>
+                  <Text className="text-xs text-gray-500" numberOfLines={1}>
+                    "{getParentMsg(replyTarget)?.text || ''}"
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setReplyTarget(null);
+                    setReviewInstruction(null);
+                    setVoiceSuggestion(null);
+                  }}
+                >
+                  <Text className="text-violet-600 text-xs font-semibold ml-2">✕</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Voice recorder row */}
+            <View className="mb-2 px-1">
+              <VoiceNoteRecorder
+                onRecordingComplete={handleVoiceNoteComplete}
+                suggestion={voiceSuggestion}
+                isLoadingSuggestion={isLoadingSuggestion}
+                disabled={isSending}
+                highlighted={!!replyTarget}
+                reviewInstruction={reviewInstruction}
+              />
+            </View>
+
+            {/* Text input row */}
             <View className="flex-row items-end gap-2 px-1">
               <View className="flex-1">
                 <LolaChatInput
                   value={text}
                   onChangeText={setText}
                   onSend={handleSend}
-                  placeholder="Type your messages"
+                  placeholder="Type your message"
                   inputStyle={{
                     borderWidth: 1,
                     borderColor: '#d1d5db',

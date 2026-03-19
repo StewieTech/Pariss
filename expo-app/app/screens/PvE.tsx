@@ -16,12 +16,12 @@ import ChatBubble from '../components/ChatBubble';
 import ChatMessageList from '../components/ChatMessageList';
 import { useAuth } from '../lib/auth';
 import LanguageSelector from '../components/LanguageSelector';
-import VoiceRecorderButton from '../components/VoiceRecorderButton';
+
 import { getLanguageMeta, type AppLanguage } from '../lib/languages';
 import type { TtsProvider } from '../lib/api';
 import { useVoiceConversation } from '../hooks/useVoiceConversation';
 
-const COMPOSER_HEIGHT = 92; // tweak if needed
+const COMPOSER_HEIGHT = 72;
 
 type PveMode = 'm1' | 'm3';
 
@@ -58,23 +58,29 @@ export default function PvEScreen({
     language,
     conversationId,
     ttsProvider,
-    onTurnComplete: ({ transcript, assistantText }) => {
+    onTurnComplete: (response) => {
       setMessages((prev) => [
         ...prev,
         {
           role: 'user',
-          content: transcript,
+          content: response.transcript,
           ...(hasProfileName ? { name: user?.profile?.name } : {}),
         },
-        { role: 'assistant', content: assistantText },
+        {
+          role: 'assistant',
+          content: response.assistantText,
+          englishTranslation: response.englishTranslation,
+          audioBase64: response.audioBase64,
+          audioContentType: response.audioContentType,
+        },
       ]);
     },
   });
   const voiceBusy = ['recording', 'uploading', 'thinking', 'speaking'].includes(
     voiceConversation.state
   );
-  const webComposerPadding = isVoiceMode ? 316 : COMPOSER_HEIGHT + 16;
-  const webOverlayOffset = isVoiceMode ? 328 : COMPOSER_HEIGHT + 28;
+  const webComposerPadding = COMPOSER_HEIGHT + 16;
+  const webOverlayOffset = COMPOSER_HEIGHT + 28;
 
   function handleModeChange(nextMode: PveMode) {
     if (controlledMode == null) setInternalMode(nextMode);
@@ -105,58 +111,50 @@ export default function PvEScreen({
           />
         </View>
 
-        <View className="mb-3">
+        <View className="mb-2 flex-row items-center gap-2 px-1 flex-wrap">
           <LanguageSelector
             language={language}
             onChange={onLanguageChange}
-            title={mode === 'm3' ? 'Voice language' : 'Chat language'}
-            subtitle={
-              mode === 'm3'
-                ? 'Lola will correct and speak in this language.'
-                : 'Lola will chat and teach in this language.'
-            }
           />
-        </View>
 
-        {isVoiceMode && (
-          <View className="mb-3 flex-row items-center gap-2 px-1">
-            <Text className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Voice:
-            </Text>
-            <TouchableOpacity
-              onPress={() => setTtsProvider('openai')}
-              className={`rounded-full border px-3 py-1 ${
-                ttsProvider === 'openai'
-                  ? 'border-violet-700 bg-violet-700'
-                  : 'border-gray-300 bg-white'
-              }`}
-            >
-              <Text
-                className={`text-xs font-semibold ${
-                  ttsProvider === 'openai' ? 'text-white' : 'text-gray-700'
+          {isVoiceMode && (
+            <View className="flex-row items-center gap-1">
+              <TouchableOpacity
+                onPress={() => setTtsProvider('openai')}
+                className={`rounded-full border px-2.5 py-1.5 ${
+                  ttsProvider === 'openai'
+                    ? 'border-violet-600 bg-violet-600'
+                    : 'border-gray-300 bg-white'
                 }`}
               >
-                Standard
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setTtsProvider('elevenlabs')}
-              className={`rounded-full border px-3 py-1 ${
-                ttsProvider === 'elevenlabs'
-                  ? 'border-amber-600 bg-amber-600'
-                  : 'border-gray-300 bg-white'
-              }`}
-            >
-              <Text
-                className={`text-xs font-semibold ${
-                  ttsProvider === 'elevenlabs' ? 'text-white' : 'text-gray-700'
+                <Text
+                  className={`text-xs font-semibold ${
+                    ttsProvider === 'openai' ? 'text-white' : 'text-gray-600'
+                  }`}
+                >
+                  Standard
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setTtsProvider('elevenlabs')}
+                className={`rounded-full border px-2.5 py-1.5 ${
+                  ttsProvider === 'elevenlabs'
+                    ? 'border-amber-600 bg-amber-600'
+                    : 'border-gray-300 bg-white'
                 }`}
               >
-                Premium
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+                <Text
+                  className={`text-xs font-semibold ${
+                    ttsProvider === 'elevenlabs' ? 'text-white' : 'text-gray-600'
+                  }`}
+                >
+                  Premium
+                </Text>
+              </TouchableOpacity>
+
+            </View>
+          )}
+        </View>
 
         {/* List */}
         <ChatMessageList<any>
@@ -165,7 +163,7 @@ export default function PvEScreen({
           bottomPadding={isWeb ? webComposerPadding : 12}
           overlayBottomOffset={isWeb ? webOverlayOffset : 84}
           header={
-            !isVoiceMode && translateOptions.length > 0 ? (
+            translateOptions.length > 0 ? (
               <View className="p-3 mb-3 rounded-2xl bg-amber-50 border border-amber-200">
                 <Text className="font-semibold text-amber-900 mb-2">
                   Choose a translation
@@ -192,7 +190,19 @@ export default function PvEScreen({
               content={item?.content}
               footer={
                 item?.role === 'assistant' && mode === 'm3' ? (
-                  <LolaVoiceButton lolaReply={item?.content} />
+                  <View>
+                    {item?.englishTranslation ? (
+                      <Text className="text-sm text-gray-500 italic mb-2">
+                        {item.englishTranslation}
+                      </Text>
+                    ) : null}
+                    <LolaVoiceButton
+                      lolaReply={item?.content}
+                      audioBase64={item?.audioBase64}
+                      audioContentType={item?.audioContentType}
+                      defaultSpeed={1.0}
+                    />
+                  </View>
                 ) : null
               }
             />
@@ -222,29 +232,79 @@ export default function PvEScreen({
         >
           {/* keep the same max width on web fixed bar */}
           <View className={isWeb ? 'w-full self-center max-w-3xl' : ''}>
-            {isVoiceMode ? (
-              <View className="mb-3 px-1">
-                <VoiceRecorderButton
-                  state={voiceConversation.state}
-                  durationMs={voiceConversation.durationMs}
-                  transcript={voiceConversation.lastTranscript}
-                  error={voiceConversation.error}
-                  languageLabel={languageMeta.label}
-                  isSupported={voiceConversation.isSupported}
-                  onStart={voiceConversation.startRecording}
-                  onStop={voiceConversation.stopRecording}
-                  onCancel={voiceConversation.cancelRecording}
+            {/* Voice status bar — only when actively recording/processing */}
+            {isVoiceMode && voiceConversation.state !== 'idle' && (
+              <View className="mb-2 flex-row items-center gap-2 px-1">
+                <View
+                  className={`h-2 w-2 rounded-full ${
+                    voiceConversation.state === 'recording'
+                      ? 'bg-rose-500'
+                      : voiceConversation.state === 'error'
+                      ? 'bg-amber-500'
+                      : 'bg-violet-500'
+                  }`}
                 />
+                <Text
+                  className={`text-xs font-semibold ${
+                    voiceConversation.state === 'recording'
+                      ? 'text-rose-600'
+                      : voiceConversation.state === 'error'
+                      ? 'text-amber-600'
+                      : 'text-violet-600'
+                  }`}
+                >
+                  {voiceConversation.state === 'recording'
+                    ? `Listening ${Math.round(voiceConversation.durationMs / 1000)}s`
+                    : voiceConversation.state === 'uploading'
+                    ? 'Sending...'
+                    : voiceConversation.state === 'thinking'
+                    ? 'Lola is thinking...'
+                    : voiceConversation.state === 'speaking'
+                    ? 'Lola is speaking...'
+                    : voiceConversation.state === 'error'
+                    ? voiceConversation.error || 'Something went wrong'
+                    : ''}
+                </Text>
+                {voiceConversation.state === 'recording' && (
+                  <TouchableOpacity
+                    onPress={voiceConversation.cancelRecording}
+                    className="ml-auto rounded-full border border-gray-300 px-2 py-0.5"
+                  >
+                    <Text className="text-xs font-medium text-gray-600">Cancel</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-            ) : null}
-
-            {isVoiceMode ? (
-              <Text className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Prefer typing instead? That works too.
-              </Text>
-            ) : null}
+            )}
 
             <View className="flex-row items-end gap-2 px-1">
+              {/* Mic button — shown in voice mode */}
+              {isVoiceMode && (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!voiceConversation.isSupported) return;
+                    if (voiceConversation.state === 'recording') {
+                      voiceConversation.stopRecording();
+                    } else if (!voiceBusy) {
+                      voiceConversation.startRecording();
+                    }
+                  }}
+                  disabled={!voiceConversation.isSupported || (voiceBusy && voiceConversation.state !== 'recording')}
+                  activeOpacity={0.8}
+                  className={`items-center justify-center rounded-full ${
+                    voiceConversation.state === 'recording'
+                      ? 'bg-rose-500'
+                      : voiceBusy
+                      ? 'bg-gray-200'
+                      : 'bg-violet-600'
+                  }`}
+                  style={{ width: 44, height: 44 }}
+                >
+                  <Text className="text-lg text-white">
+                    {voiceConversation.state === 'recording' ? '■' : '🎙'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               <View className="flex-1">
                 <LolaChatInput
                   value={text}
@@ -252,7 +312,7 @@ export default function PvEScreen({
                   onSend={() => sendRef.current?.send?.()}
                   placeholder={
                     isVoiceMode
-                      ? `Type a sentence if you would rather not use voice. Lola will answer in ${languageMeta.label}.`
+                      ? `Type or tap mic • ${languageMeta.label}`
                       : "Ask Lola a question, like 'What's your idea of a perfect day?'"
                   }
                   placeholderTextColor="#9CA3AF"
@@ -268,28 +328,26 @@ export default function PvEScreen({
                 />
               </View>
 
-              {!isVoiceMode ? (
-                <TranslateButton
-                  title="Translate"
-                  loadingTitle="Translating..."
-                  loading={isTranslating}
-                  disabled={!text}
-                  onPress={async () => {
-                    if (!text) return;
-                    setIsTranslating(true);
-                    setTranslateOptions([]);
-                    try {
-                      const variants = await translateFirst(text, language);
-                      setTranslateOptions(variants.length ? variants.slice(0, 3) : ['(no variants)']);
-                    } catch (e) {
-                      console.error('TranslateFirst failed', e);
-                      setTranslateOptions([`(translation failed) ${String(e)}`]);
-                    } finally {
-                      setIsTranslating(false);
-                    }
-                  }}
-                />
-              ) : null}
+              <TranslateButton
+                title="Translate"
+                loadingTitle="Translating..."
+                loading={isTranslating}
+                disabled={!text}
+                onPress={async () => {
+                  if (!text) return;
+                  setIsTranslating(true);
+                  setTranslateOptions([]);
+                  try {
+                    const variants = await translateFirst(text, language);
+                    setTranslateOptions(variants.length ? variants.slice(0, 3) : ['(no variants)']);
+                  } catch (e) {
+                    console.error('TranslateFirst failed', e);
+                    setTranslateOptions([`(translation failed) ${String(e)}`]);
+                  } finally {
+                    setIsTranslating(false);
+                  }
+                }}
+              />
 
               <SendButton
                 ref={sendRef}
@@ -297,8 +355,6 @@ export default function PvEScreen({
                 setText={setText}
                 messages={messages}
                 setMessages={(updater: any) => {
-                  // Keep existing SendButton behavior, but if it appends a user message,
-                  // we attach the profile name (used for future personalization/UI).
                   setMessages((prev) => {
                     const next = typeof updater === 'function' ? updater(prev) : updater;
                     if (!Array.isArray(next)) return next;
@@ -314,7 +370,7 @@ export default function PvEScreen({
                 language={language}
                 conversationId={conversationId}
                 disabled={voiceBusy}
-                label={isVoiceMode ? 'Send text' : undefined}
+                label={isVoiceMode ? 'Send' : undefined}
               />
             </View>
           </View>

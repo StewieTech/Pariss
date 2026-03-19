@@ -11,7 +11,7 @@ const DEFAULT_OPENAI_TTS_MODEL = 'tts-1';
 
 const VALID_OPENAI_VOICES = ['nova', 'shimmer', 'echo', 'onyx', 'fable', 'alloy', 'ash', 'sage', 'coral'] as const;
 
-async function synthesizeOpenAI(text: string, _voiceIdIgnored?: string): Promise<SynthResult> {
+async function synthesizeOpenAI(text: string, _voiceIdIgnored?: string, speed: number = 1.0): Promise<SynthResult> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error('OPENAI_API_KEY not set in environment');
 
@@ -24,6 +24,7 @@ async function synthesizeOpenAI(text: string, _voiceIdIgnored?: string): Promise
     voice: voice as any,
     input: text,
     response_format: 'mp3',
+    speed: Math.max(0.25, Math.min(4.0, speed)),
   });
 
   const ab = await response.arrayBuffer();
@@ -65,14 +66,15 @@ async function synthesizeElevenLabs(text: string, voiceId: string): Promise<Synt
 export async function synthesize(
   text: string,
   voiceId: string,
-  provider: TtsProvider = 'openai'
+  provider: TtsProvider = 'openai',
+  speed: number = 1.0
 ): Promise<SynthResult> {
   if (!text) throw new Error('text required');
 
   if (provider === 'elevenlabs') {
     return synthesizeElevenLabs(text, voiceId);
   }
-  return synthesizeOpenAI(text, voiceId);
+  return synthesizeOpenAI(text, voiceId, speed);
 }
 
 export default { synthesize };

@@ -58,6 +58,7 @@ export function useVoiceConversation({
   conversationId,
   voiceId,
   ttsProvider = 'openai',
+  speed = 1.0,
   maxRecordingMs = DEFAULT_MAX_RECORDING_MS,
   onTurnComplete,
 }: {
@@ -65,6 +66,7 @@ export function useVoiceConversation({
   conversationId: string;
   voiceId?: string;
   ttsProvider?: TtsProvider;
+  speed?: number;
   maxRecordingMs?: number;
   onTurnComplete?: (response: VoiceTurnResponse) => void;
 }) {
@@ -84,6 +86,7 @@ export function useVoiceConversation({
   const isSupported = isWebVoiceSupported();
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       shouldSendWebRecordingRef.current = false;
@@ -171,7 +174,7 @@ export function useVoiceConversation({
 
     if (response.audioBase64) {
       setState('speaking');
-      await playBase64Audio(response.audioBase64, response.audioContentType);
+      await playBase64Audio(response.audioBase64, response.audioContentType, speed);
     }
 
     if (!mountedRef.current) return;
